@@ -1329,7 +1329,7 @@ class DiscreteProofAudit:
             )
         )
 
-        def dealias_field(self, u):
+    def dealias_field(self, u):
         """
         Apply coordinate-wise 2/3 Fourier truncation and then restore
         discrete divergence-freeness.
@@ -1346,7 +1346,7 @@ class DiscreteProofAudit:
         return self.fl.leray_project(filtered)
 
 
-        def aliasing_audit(self, u):
+    def aliasing_audit(self, u):
         """
         Compare the discrete quotient on the original divergence-free field
         with the quotient on its coordinate-wise 2/3-truncated,
