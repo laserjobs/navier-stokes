@@ -20,27 +20,22 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-          cache: pip
 
-      - name: Install dependencies
-        shell: bash
+      - name: Install numerical dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            python -m pip install -r requirements.txt
-          fi
           python -m pip install numpy pytest
 
-      - name: Verify Python environment
+      - name: Verify environment
         run: |
           python --version
           python -c "import numpy; print('NumPy', numpy.__version__)"
 
-      - name: Compile Python files
+      - name: Compile Python source
         run: |
           python -m compileall -q .
 
-      - name: Run tests if present
+      - name: Run pytest if tests exist
         shell: bash
         run: |
           if [ -d tests ]; then
@@ -49,20 +44,22 @@ jobs:
             echo "No tests/ directory found; skipping pytest."
           fi
 
+      - name: Locate discrete proof
+        shell: bash
+        run: |
+          echo "Repository contents:"
+          find . -maxdepth 3 -type f | sort
+
       - name: Numerical sanity checks
         shell: bash
         run: |
           set -e
 
-          if [ -f discrete_proof.py ]; then
-            python discrete_proof.py
-          elif [ -f input_file_0.py ]; then
-            python input_file_0.py
+          if [ -f ./discrete_proof.py ]; then
+            python ./discrete_proof.py
+          elif [ -f ./shell_audit.py ]; then
+            python ./shell_audit.py
           else
-            echo "No standalone discrete proof entry point found."
-            echo "Compilation and available tests have already been checked."
+            echo "No standalone numerical entry point found."
+            echo "Source compilation completed successfully."
           fi
-
-      - name: Check repository status
-        run: |
-          git status --short
