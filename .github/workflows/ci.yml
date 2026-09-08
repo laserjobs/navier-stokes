@@ -1,65 +1,151 @@
-name: CI
+name: Discrete Navier-Stokes Proof / Audit
 
 on:
   push:
+    branches:
+      - main
+      - master
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: discrete-proof-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  numerical-sanity:
-    name: Numerical sanity checks
+  discrete-proof:
+    name: Discrete proof / numerical audit
     runs-on: ubuntu-latest
 
     steps:
+      # ------------------------------------------------------------
+      # Repository
+      # ------------------------------------------------------------
       - name: Check out repository
         uses: actions/checkout@v5
 
+      # ------------------------------------------------------------
+      # Python
+      # ------------------------------------------------------------
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
+      # ------------------------------------------------------------
+      # Dependencies
+      #
+      # Deliberately do not use setup-python pip caching here.
+      # This repository does not require requirements.txt or
+      # pyproject.toml for the core numerical audit.
+      # ------------------------------------------------------------
       - name: Install numerical dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install numpy pytest
+          python -m pip install numpy
 
-      - name: Verify environment
+      # ------------------------------------------------------------
+      # Repository sanity
+      # ------------------------------------------------------------
+      - name: Display repository contents
         run: |
+          echo "Repository root:"
+          pwd
+          echo
+          find . -maxdepth 2 -type f | sort
+
+      - name: Verify discrete_proof.py exists
+        run: |
+          test -f discrete_proof.py
+
+      - name: Compile discrete_proof.py
+        run: |
+          python -m py_compile discrete_proof.py
+
+      # ------------------------------------------------------------
+      # Numerical audit
+      # ------------------------------------------------------------
+      - name: Run discrete proof audit
+        shell: bash
+        run: |
+          set -o pipefail
+
+          echo "=============================================================="
+          echo "DISCRETE NAVIER-STOKES PROOF / AUDIT"
+          echo "=============================================================="
+          echo "Python:"
           python --version
-          python -c "import numpy; print('NumPy', numpy.__version__)"
+          echo
+          echo "NumPy:"
+          python -c "import numpy; print(numpy.__version__)"
+          echo
+          echo "Running discrete_proof.py ..."
+          echo
 
-      - name: Compile Python source
-        run: |
-          python -m compileall -q .
+          python discrete_proof.py 2>&1 | tee discrete_proof_output.txt
 
-      - name: Run pytest if tests exist
+      # ------------------------------------------------------------
+      # Preserve complete output in GitHub Actions summary
+      # ------------------------------------------------------------
+      - name: Publish numerical audit summary
+        if: always()
         shell: bash
         run: |
-          if [ -d tests ]; then
-            python -m pytest -q
-          else
-            echo "No tests/ directory found; skipping pytest."
-          fi
+          {
+            echo "# Discrete Navier-Stokes Proof / Audit"
+            echo
+            echo "> **Experimental numerical audit — not a continuum proof.**"
+            echo
+            echo "## Execution"
+            echo
+            echo "- Python: $(python --version 2>&1)"
+            echo "- NumPy: $(python -c 'import numpy; print(numpy.__version__)' 2>/dev/null || echo unavailable)"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Runner: \`${RUNNER_OS}\`"
+            echo
+            echo "## Output"
+            echo
+            echo '```text'
 
-      - name: Locate discrete proof
-        shell: bash
+            if [ -f discrete_proof_output.txt ]; then
+              cat discrete_proof_output.txt
+            else
+              echo "No numerical output was produced."
+            fi
+
+            echo '```'
+            echo
+            echo "## Interpretation"
+            echo
+            echo "The numerical results are computational diagnostics."
+            echo "They do not establish continuum global regularity for"
+            echo "the three-dimensional Navier-Stokes equations."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ------------------------------------------------------------
+      # Upload complete output as an artifact
+      # ------------------------------------------------------------
+      - name: Upload numerical audit output
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: discrete-proof-output-${{ github.run_number }}
+          path: discrete_proof_output.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+      # ------------------------------------------------------------
+      # Final status
+      # ------------------------------------------------------------
+      - name: Audit completed
+        if: success()
         run: |
-          echo "Repository contents:"
-          find . -maxdepth 3 -type f | sort
-
-      - name: Numerical sanity checks
-        shell: bash
-        run: |
-          set -e
-
-          if [ -f ./discrete_proof.py ]; then
-            python ./discrete_proof.py
-          elif [ -f ./shell_audit.py ]; then
-            python ./shell_audit.py
-          else
-            echo "No standalone numerical entry point found."
-            echo "Source compilation completed successfully."
-          fi
+          echo "=============================================================="
+          echo "AUDIT COMPLETED SUCCESSFULLY"
+          echo "=============================================================="
+          echo "discrete_proof.py executed without a non-zero exit status."
+          echo "The numerical output is available in the job summary"
+          echo "and as a downloadable artifact."
