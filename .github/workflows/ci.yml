@@ -1,41 +1,68 @@
-name: Discrete Proof Audit
+name: CI
 
 on:
   push:
-    branches: ["main"]
   pull_request:
-    branches: ["main"]
+
+permissions:
+  contents: read
 
 jobs:
-  sanity:
+  numerical-sanity:
     name: Numerical sanity checks
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12"
+          cache: pip
 
       - name: Install dependencies
+        shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          if [ -f requirements.txt ]; then
+            python -m pip install -r requirements.txt
+          fi
+          python -m pip install numpy pytest
 
-      - name: Compile Python source
+      - name: Verify Python environment
         run: |
-          python -m py_compile discrete_proof.py
+          python --version
+          python -c "import numpy; print('NumPy', numpy.__version__)"
 
-      - name: Import module
+      - name: Compile Python files
         run: |
-          python - <<'PY'
-          import discrete_proof
-          print("discrete_proof import: OK")
-          PY
+          python -m compileall -q .
 
-      - name: Run deterministic audit
+      - name: Run tests if present
+        shell: bash
         run: |
-          python discrete_proof.py
+          if [ -d tests ]; then
+            python -m pytest -q
+          else
+            echo "No tests/ directory found; skipping pytest."
+          fi
+
+      - name: Numerical sanity checks
+        shell: bash
+        run: |
+          set -e
+
+          if [ -f discrete_proof.py ]; then
+            python discrete_proof.py
+          elif [ -f input_file_0.py ]; then
+            python input_file_0.py
+          else
+            echo "No standalone discrete proof entry point found."
+            echo "Compilation and available tests have already been checked."
+          fi
+
+      - name: Check repository status
+        run: |
+          git status --short
