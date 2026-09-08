@@ -1,0 +1,41 @@
+name: Discrete Proof Audit
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  sanity:
+    name: Numerical sanity checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile Python source
+        run: |
+          python -m py_compile discrete_proof.py
+
+      - name: Import module
+        run: |
+          python - <<'PY'
+          import discrete_proof
+          print("discrete_proof import: OK")
+          PY
+
+      - name: Run deterministic audit
+        run: |
+          python discrete_proof.py
