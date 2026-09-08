@@ -1,0 +1,724 @@
+import numpy as np
+
+
+class StructurePreservingLatticeFluid3D:
+    """
+    Structure-preserving semidiscrete 3-D Navier-Stokes system
+    on a periodic cubic lattice.
+
+    Important:
+      - D0 is the central difference operator.
+      - D0* = -D0 exactly (up to floating-point arithmetic).
+      - The Leray projection uses the SAME central-difference symbol.
+      - The Laplacian is the standard 7-point Laplacian.
+      - The nonlinear term is the skew-symmetric Morinishi form.
+
+    Note:
+      Central differences possess Nyquist null modes. The Leray
+      projection therefore has to handle nonzero modes for which
+      the central derivative symbol vanishes.
+    """
+
+    def __init__(self, N=16, L=2.0 * np.pi, nu=0.01):
+        if N < 4:
+            raise ValueError("N should be at least 4.")
+        if L <= 0:
+            raise ValueError("L must be positive.")
+        if nu < 0:
+            raise ValueError("nu must be nonnegative.")
+
+        self.N = int(N)
+        self.L = float(L)
+        self.h = self.L / self.N
+        self.nu = float(nu)
+
+        # ------------------------------------------------------------
+        # Physical grid
+        # ------------------------------------------------------------
+        coord = np.arange(self.N) * self.h
+
+        self.X, self.Y, self.Z = np.meshgrid(
+            coord,
+            coord,
+            coord,
+            indexing="ij"
+        )
+
+        # ------------------------------------------------------------
+        # CORRECT Fourier wave numbers
+        #
+        # np.fft.fftfreq gives cycles/unit length.
+        # Multiplication by 2*pi gives angular wave numbers.
+        # ------------------------------------------------------------
+        k_1d = 2.0 * np.pi * np.fft.fftfreq(
+            self.N,
+            d=self.h
+        )
+
+        Kx, Ky, Kz = np.meshgrid(
+            k_1d,
+            k_1d,
+            k_1d,
+            indexing="ij"
+        )
+
+        self.Kx = Kx
+        self.Ky = Ky
+        self.Kz = Kz
+
+        # ------------------------------------------------------------
+        # Fourier symbol of central difference:
+        #
+        # D0 -> i sin(k h)/h
+        #
+        # The real coefficient used in the Leray projection is
+        # k_tilde = sin(k h)/h.
+        # ------------------------------------------------------------
+        self.K_tilde_x = np.sin(Kx * self.h) / self.h
+        self.K_tilde_y = np.sin(Ky * self.h) / self.h
+        self.K_tilde_z = np.sin(Kz * self.h) / self.h
+
+        self.K_sq = (
+            self.K_tilde_x ** 2
+            + self.K_tilde_y ** 2
+            + self.K_tilde_z ** 2
+        )
+
+        # Modes for which the central derivative symbol is nonzero.
+        #
+        # IMPORTANT:
+        # K_sq can vanish not only at k=0, but also at Nyquist
+        # frequencies. Therefore we do NOT simply replace K_sq[0,0,0].
+        self.projectable_modes = self.K_sq > 1e-14
+
+        # Safe reciprocal used by the projection.
+        self.inv_K_sq = np.zeros_like(self.K_sq)
+        self.inv_K_sq[self.projectable_modes] = (
+            1.0 / self.K_sq[self.projectable_modes]
+        )
+
+    # ================================================================
+    # Basic finite differences
+    # ================================================================
+
+    def D0(self, f, axis):
+        """
+        Central difference:
+
+            D0 f(x) = [f(x+h e_j) - f(x-h e_j)]/(2h)
+
+        On a periodic grid:
+
+            D0* = -D0
+        """
+        return (
+            np.roll(f, -1, axis=axis)
+            - np.roll(f, 1, axis=axis)
+        ) / (2.0 * self.h)
+
+    def D_plus(self, f, axis):
+        """Forward difference."""
+        return (
+            np.roll(f, -1, axis=axis) - f
+        ) / self.h
+
+    def D_minus(self, f, axis):
+        """Backward difference."""
+        return (
+            f - np.roll(f, 1, axis=axis)
+        ) / self.h
+
+    # ================================================================
+    # Divergence / gradient
+    # ================================================================
+
+    def divergence(self, u):
+        """
+        Central discrete divergence:
+
+            div_h u = D0_x u_x + D0_y u_y + D0_z u_z
+        """
+        return (
+            self.D0(u[0], 0)
+            + self.D0(u[1], 1)
+            + self.D0(u[2], 2)
+        )
+
+    def gradient(self, p):
+        """
+        Central discrete gradient.
+
+        Because D0* = -D0:
+
+            <grad_h p, u> = -<p, div_h u>
+        """
+        return np.stack([
+            self.D0(p, 0),
+            self.D0(p, 1),
+            self.D0(p, 2)
+        ], axis=0)
+
+    # ================================================================
+    # Laplacian
+    # ================================================================
+
+    def laplacian(self, f):
+        """
+        Standard 7-point discrete Laplacian:
+
+            Delta_h = sum_j D_j^- D_j^+
+
+        with
+
+            <Delta_h f, f> = -sum_j ||D_j^+ f||_2^2.
+        """
+        lap = np.zeros_like(f)
+
+        for ax in range(3):
+            lap += (
+                np.roll(f, -1, axis=ax)
+                - 2.0 * f
+                + np.roll(f, 1, axis=ax)
+            ) / self.h ** 2
+
+        return lap
+
+    # ================================================================
+    # Leray projection
+    # ================================================================
+
+    def leray_project(self, u):
+        """
+        Discrete Leray projection associated with the CENTRAL
+        divergence/gradient.
+
+        In Fourier space:
+
+            P(k) = I - k_tilde k_tilde^T / |k_tilde|^2
+
+        whenever |k_tilde| != 0.
+
+        Central differences have additional null modes at Nyquist
+        frequencies. On those modes there is no derivative constraint,
+        so we leave the mode unchanged.
+
+        This is the orthogonal projection onto the kernel of the
+        central-difference divergence.
+        """
+        u_hat = np.fft.fftn(
+            u,
+            axes=(1, 2, 3)
+        )
+
+        kdotu = (
+            self.K_tilde_x * u_hat[0]
+            + self.K_tilde_y * u_hat[1]
+            + self.K_tilde_z * u_hat[2]
+        )
+
+        correction_factor = (
+            kdotu * self.inv_K_sq
+        )
+
+        proj_hat = np.empty_like(u_hat)
+
+        proj_hat[0] = (
+            u_hat[0]
+            - self.K_tilde_x * correction_factor
+        )
+
+        proj_hat[1] = (
+            u_hat[1]
+            - self.K_tilde_y * correction_factor
+        )
+
+        proj_hat[2] = (
+            u_hat[2]
+            - self.K_tilde_z * correction_factor
+        )
+
+        return np.real(
+            np.fft.ifftn(
+                proj_hat,
+                axes=(1, 2, 3)
+            )
+        )
+
+    # ================================================================
+    # Skew-symmetric convection
+    # ================================================================
+
+    def skew_convection(self, u, v):
+        """
+        Morinishi skew-symmetric convection:
+
+          B_i(u,v)
+            = 1/2 sum_j [
+                  u_j D_j^0 v_i
+                  + D_j^0(u_j v_i)
+              ]
+
+        For divergence-free u:
+
+          <B(u,v), w> = -<B(u,w), v>
+
+        and in particular:
+
+          <B(u,u),u> = 0.
+        """
+        B = np.zeros_like(v)
+
+        for i in range(3):
+            for j in range(3):
+
+                term1 = (
+                    u[j] * self.D0(v[i], axis=j)
+                )
+
+                term2 = self.D0(
+                    u[j] * v[i],
+                    axis=j
+                )
+
+                B[i] += 0.5 * (
+                    term1 + term2
+                )
+
+        return B
+
+    # ================================================================
+    # RHS
+    # ================================================================
+
+    def rhs(self, u):
+        """
+        Semidiscrete Navier-Stokes equation:
+
+            du/dt =
+                -P_h B_h(u,u)
+                + nu Delta_h u
+        """
+        conv = self.skew_convection(u, u)
+
+        projected_conv = self.leray_project(conv)
+
+        diff = np.stack([
+            self.laplacian(u[0]),
+            self.laplacian(u[1]),
+            self.laplacian(u[2])
+        ], axis=0)
+
+        return (
+            -projected_conv
+            + self.nu * diff
+        )
+
+    # ================================================================
+    # Inner products and norms
+    # ================================================================
+
+    def inner_product(self, u, v):
+        """
+        Physical discrete L2 inner product.
+        """
+        return np.sum(u * v) * self.h ** 3
+
+    def norm_l2(self, u):
+        return np.sqrt(
+            self.inner_product(u, u)
+        )
+
+    def energy(self, u):
+        return 0.5 * self.inner_product(u, u)
+
+    # ================================================================
+    # Discrete enstrophy
+    # ================================================================
+
+    def enstrophy(self, u):
+        """
+        Forward-difference gradient energy:
+
+            sum_{i,j} ||D_j^+ u_i||_2^2
+        """
+        ens = 0.0
+
+        for i in range(3):
+            for j in range(3):
+                d = self.D_plus(
+                    u[i],
+                    j
+                )
+
+                ens += self.inner_product(d, d)
+
+        return ens
+
+    # ================================================================
+    # Divergence diagnostics
+    # ================================================================
+
+    def divergence_l2(self, u):
+        d = self.divergence(u)
+        return np.sqrt(
+            np.sum(d ** 2) * self.h ** 3
+        )
+
+    def divergence_linf(self, u):
+        return np.max(
+            np.abs(self.divergence(u))
+        )
+
+    # ================================================================
+    # Energy derivative
+    # ================================================================
+
+    def energy_derivative(self, u):
+        """
+        Exact semidiscrete identity:
+
+            dE/dt = -nu * enstrophy(u)
+
+        provided u lies in the projected/divergence-free subspace.
+        """
+        return -self.nu * self.enstrophy(u)
+
+    # ================================================================
+    # Random divergence-free initial condition
+    # ================================================================
+
+    def random_divergence_free_field(
+        self,
+        seed=1234,
+        amplitude=1.0
+    ):
+        """
+        Generate a random field and project it with P_h.
+        """
+        rng = np.random.default_rng(seed)
+
+        u = rng.standard_normal(
+            (3, self.N, self.N, self.N)
+        )
+
+        u = self.leray_project(u)
+
+        current = self.norm_l2(u)
+
+        if current > 0:
+            u *= amplitude / current
+
+        return u
+
+    # ================================================================
+    # Taylor-Green vortex
+    # ================================================================
+
+    def taylor_green(self, amplitude=1.0):
+        """
+        Taylor-Green vortex:
+
+            u_x = A sin(x) cos(y) cos(z)
+            u_y = -A cos(x) sin(y) cos(z)
+            u_z = 0
+
+        This is exactly divergence-free under the central difference
+        operator as well.
+        """
+        u = np.zeros(
+            (3, self.N, self.N, self.N),
+            dtype=float
+        )
+
+        u[0] = (
+            amplitude
+            * np.sin(self.X)
+            * np.cos(self.Y)
+            * np.cos(self.Z)
+        )
+
+        u[1] = (
+            -amplitude
+            * np.cos(self.X)
+            * np.sin(self.Y)
+            * np.cos(self.Z)
+        )
+
+        u[2] = 0.0
+
+        return self.leray_project(u)
+
+    # ================================================================
+    # RK4
+    # ================================================================
+
+    def rk4_step(self, u, dt):
+        """
+        Classical fourth-order Runge-Kutta step.
+        """
+        k1 = self.rhs(u)
+        k2 = self.rhs(u + 0.5 * dt * k1)
+        k3 = self.rhs(u + 0.5 * dt * k2)
+        k4 = self.rhs(u + dt * k3)
+
+        return u + (
+            dt / 6.0
+        ) * (
+            k1 + 2.0 * k2 + 2.0 * k3 + k4
+        )
+
+    def evolve(self, u0, dt, steps):
+        """
+        Evolve the semidiscrete system.
+
+        Because the RHS contains the Leray projection, divergence-free
+        data remains divergence-free up to floating-point roundoff.
+        """
+        u = np.array(
+            u0,
+            dtype=float,
+            copy=True
+        )
+
+        trajectory = [u.copy()]
+
+        for _ in range(steps):
+            u = self.rk4_step(u, dt)
+            trajectory.append(u.copy())
+
+        return trajectory
+
+
+# ====================================================================
+# TEST SUITE
+# ====================================================================
+
+def run_tests():
+    print("=" * 80)
+    print("STRUCTURE-PRESERVING LATTICE NAVIER-STOKES TEST SUITE")
+    print("=" * 80)
+
+    N = 16
+    L = 2.0 * np.pi
+    nu = 0.01
+
+    fluid = StructurePreservingLatticeFluid3D(
+        N=N,
+        L=L,
+        nu=nu
+    )
+
+    # ---------------------------------------------------------------
+    # Test 1: D0 skew-adjointness
+    # ---------------------------------------------------------------
+
+    rng = np.random.default_rng(42)
+
+    f = rng.standard_normal(
+        (N, N, N)
+    )
+
+    g = rng.standard_normal(
+        (N, N, N)
+    )
+
+    Df = fluid.D0(f, axis=0)
+    Dg = fluid.D0(g, axis=0)
+
+    lhs = fluid.inner_product(Df, g)
+    rhs = -fluid.inner_product(f, Dg)
+
+    skew_defect = abs(lhs - rhs) / max(
+        1.0,
+        abs(lhs),
+        abs(rhs)
+    )
+
+    print(
+        f"Test 1: D0 skew-adjoint defect = "
+        f"{skew_defect:.3e}"
+    )
+
+    # ---------------------------------------------------------------
+    # Test 2: Leray projection
+    # ---------------------------------------------------------------
+
+    u = fluid.random_divergence_free_field(
+        seed=123,
+        amplitude=1.0
+    )
+
+    div_inf = fluid.divergence_linf(u)
+
+    print(
+        f"Test 2: ||div_h u||_inf = "
+        f"{div_inf:.3e}"
+    )
+
+    # ---------------------------------------------------------------
+    # Test 3: Projection idempotence
+    # ---------------------------------------------------------------
+
+    u_random = rng.standard_normal(
+        (3, N, N, N)
+    )
+
+    Pu = fluid.leray_project(u_random)
+    P2u = fluid.leray_project(Pu)
+
+    projection_defect = fluid.norm_l2(
+        P2u - Pu
+    ) / max(
+        1.0,
+        fluid.norm_l2(Pu)
+    )
+
+    print(
+        f"Test 3: ||P^2u-Pu||/||Pu|| = "
+        f"{projection_defect:.3e}"
+    )
+
+    # ---------------------------------------------------------------
+    # Test 4: Convective energy cancellation
+    # ---------------------------------------------------------------
+
+    B = fluid.skew_convection(u, u)
+
+    nonlinear_energy = fluid.inner_product(
+        B,
+        u
+    )
+
+    nonlinear_relative = abs(
+        nonlinear_energy
+    ) / max(
+        1.0,
+        fluid.norm_l2(B) * fluid.norm_l2(u)
+    )
+
+    print(
+        f"Test 4: |<B(u,u),u>| normalized = "
+        f"{nonlinear_relative:.3e}"
+    )
+
+    # ---------------------------------------------------------------
+    # Test 5: Full RHS energy identity
+    # ---------------------------------------------------------------
+
+    rhs_u = fluid.rhs(u)
+
+    numerical_dE = fluid.inner_product(
+        rhs_u,
+        u
+    )
+
+    theoretical_dE = (
+        -nu * fluid.enstrophy(u)
+    )
+
+    energy_defect = abs(
+        numerical_dE - theoretical_dE
+    ) / max(
+        1.0,
+        abs(theoretical_dE)
+    )
+
+    print(
+        f"Test 5: Energy identity relative defect = "
+        f"{energy_defect:.3e}"
+    )
+
+    # ---------------------------------------------------------------
+    # Test 6: Taylor-Green divergence
+    # ---------------------------------------------------------------
+
+    tg = fluid.taylor_green()
+
+    tg_div = fluid.divergence_linf(tg)
+
+    print(
+        f"Test 6: Taylor-Green ||div_h u||_inf = "
+        f"{tg_div:.3e}"
+    )
+
+    # ---------------------------------------------------------------
+    # Test 7: Inviscid energy conservation
+    # ---------------------------------------------------------------
+
+    inviscid = StructurePreservingLatticeFluid3D(
+        N=N,
+        L=L,
+        nu=0.0
+    )
+
+    u_inv = inviscid.random_divergence_free_field(
+        seed=777,
+        amplitude=1.0
+    )
+
+    E0 = inviscid.energy(u_inv)
+
+    dt = 1e-4
+    steps = 200
+
+    for _ in range(steps):
+        u_inv = inviscid.rk4_step(
+            u_inv,
+            dt
+        )
+
+    E1 = inviscid.energy(u_inv)
+
+    energy_drift = abs(E1 - E0) / max(
+        1.0,
+        abs(E0)
+    )
+
+    print(
+        f"Test 7: Inviscid RK4 relative energy drift = "
+        f"{energy_drift:.3e}"
+    )
+
+    # ---------------------------------------------------------------
+    # Test 8: Dissipative evolution
+    # ---------------------------------------------------------------
+
+    u_visc = fluid.random_divergence_free_field(
+        seed=888,
+        amplitude=1.0
+    )
+
+    E_initial = fluid.energy(u_visc)
+
+    for _ in range(100):
+        u_visc = fluid.rk4_step(
+            u_visc,
+            dt
+        )
+
+    E_final = fluid.energy(u_visc)
+
+    print(
+        f"Test 8: Initial energy = {E_initial:.8e}"
+    )
+
+    print(
+        f"        Final energy   = {E_final:.8e}"
+    )
+
+    print(
+        f"        Energy change  = "
+        f"{E_final - E_initial:.8e}"
+    )
+
+    # ---------------------------------------------------------------
+    # Summary
+    # ---------------------------------------------------------------
+
+    print("=" * 80)
+    print("TEST SUITE COMPLETE")
+    print("=" * 80)
+
+
+if __name__ == "__main__":
+    run_tests()
