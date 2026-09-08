@@ -784,10 +784,11 @@ class DiscreteProofAudit:
             * B_hat[2]
         )
 
-        p_hat = (
-            -div_B_hat
+                p_hat = (
+            div_B_hat
             * self.fl.inv_K_sq
         )
+
 
         grad_p_hat = np.stack(
             [
@@ -835,10 +836,11 @@ class DiscreteProofAudit:
             * Q_hat[2]
         )
 
-        q_hat = (
-            -div_Q_hat
+                q_hat = (
+            div_Q_hat
             * self.fl.inv_K_sq
         )
+
 
         grad_q_hat = np.stack(
             [
@@ -1327,26 +1329,34 @@ class DiscreteProofAudit:
             )
         )
 
-    def dealias_field(self, u):
+        def dealias_field(self, u):
         """
-        Apply the 2/3 Fourier truncation.
+        Apply coordinate-wise 2/3 Fourier truncation and then restore
+        discrete divergence-freeness.
 
-        Projection is intentionally NOT applied afterward. Otherwise the
-        comparison would change two properties of the field at once:
-        Fourier support and divergence-free projection.
+        The projection is important here: the critical quotient is intended
+        to be evaluated on the discrete divergence-free class. A Fourier
+        truncation alone can destroy that property.
         """
-        return self.spectral_filter(
+        filtered = self.spectral_filter(
             u,
             self.two_thirds_mask(),
         )
 
-    def aliasing_audit(self, u):
-        """
-        Compare the quotient before and after 2/3 spectral truncation.
+        return self.fl.leray_project(filtered)
 
-        This is a stress test, not an exact measurement of aliasing error
-        in a fully dealiased nonlinear solver.
+
+        def aliasing_audit(self, u):
         """
+        Compare the discrete quotient on the original divergence-free field
+        with the quotient on its coordinate-wise 2/3-truncated,
+        re-projected version.
+
+        This measures sensitivity of the diagnostic to removal of
+        high-frequency content. It is NOT, by itself, an aliasing-error
+        measurement for a fully dealiased nonlinear time-stepping scheme.
+        """
+
         raw = self.critical_quotient(u)
 
         dealiased_field = (
