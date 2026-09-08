@@ -789,7 +789,6 @@ class DiscreteProofAudit:
             * self.fl.inv_K_sq
         )
 
-
         grad_p_hat = np.stack(
             [
                 1j
@@ -840,7 +839,6 @@ class DiscreteProofAudit:
             div_Q_hat
             * self.fl.inv_K_sq
         )
-
 
         grad_q_hat = np.stack(
             [
@@ -1345,7 +1343,6 @@ class DiscreteProofAudit:
 
         return self.fl.leray_project(filtered)
 
-
     def aliasing_audit(self, u):
         """
         Compare the discrete quotient on the original divergence-free field
@@ -1356,7 +1353,6 @@ class DiscreteProofAudit:
         high-frequency content. It is NOT, by itself, an aliasing-error
         measurement for a fully dealiased nonlinear time-stepping scheme.
         """
-
         raw = self.critical_quotient(u)
 
         dealiased_field = (
