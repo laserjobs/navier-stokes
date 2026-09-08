@@ -784,7 +784,7 @@ class DiscreteProofAudit:
             * B_hat[2]
         )
 
-                p_hat = (
+        p_hat = (
             div_B_hat
             * self.fl.inv_K_sq
         )
@@ -836,7 +836,7 @@ class DiscreteProofAudit:
             * Q_hat[2]
         )
 
-                q_hat = (
+        q_hat = (
             div_Q_hat
             * self.fl.inv_K_sq
         )
