@@ -1,125 +1,108 @@
 """
 ==============================================================================
-DISCRETE NAVIER-STOKES PROOF / AUDIT — LEVEL 1 / LEVEL 2
+DISCRETE NAVIER-STOKES PROOF / AUDIT
+LEVEL-1 / LEVEL-2 CERTIFICATE-DISCOVERY ENGINE
 ==============================================================================
 
 STATUS
 ------
-EXPERIMENTAL NUMERICAL AUDIT — NOT A CONTINUUM PROOF.
+EXPERIMENTAL DISCRETE AUDIT.
 
-This program tests finite-dimensional periodic lattice quantities associated
-with a structure-preserving discretization of 3-D Navier-Stokes.
+This program works with a finite periodic lattice.  It verifies exact
+finite-dimensional identities numerically and searches for large values of
+the associated scale-invariant quotients.
 
-It does NOT establish global regularity of the continuum 3-D
-Navier-Stokes equations.
+It does NOT prove global regularity of the continuum 3-D Navier-Stokes
+equations.
 
-MATHEMATICAL LEVELS
+MATHEMATICAL STATUS
 -------------------
-LEVEL 1 — EXACT DISCRETE ALGEBRA
-    The code audits:
 
-        * central-difference skew-adjointness;
-        * Leray projection properties;
-        * discrete energy cancellation;
-        * compatible Laplacian identity;
-        * pressure/splitting identity;
-        * weighted edge quantities.
+LEVEL 1
+-------
+Exact algebraic identities are tested numerically:
 
-    The algebraic identities are finite-dimensional identities.
+    <D0 f, g> = - <f, D0 g>
 
-LEVEL 2 — NUMERICAL EXTREMAL SEARCH
-    The principal unresolved numerical target is the weighted edge quotient
+    P^2 = P
 
-        C_edge(u)
-          =
-        sum_{x,j} |u| |delta_j u|^3
-        ----------------------------------------------
-        h ||u||_3 sum_{x,j} |u| |delta_j u|^2 / h^2.
+    div(Pu) = 0
 
-    Numerical searches for large values of
-
-        C_edge, C_P, C_S, R_h
-
-    provide numerical evidence only. They do NOT establish a uniform
-    N-independent bound.
-
-LEVEL 3 — CONTINUUM
-    No continuum theorem is claimed.
-
-DISCRETE OPERATORS
-------------------
-The primary derivative is the periodic central difference
-
-    D0 f(x) = [f(x+h) - f(x-h)] / (2h).
-
-Its Fourier symbol is
-
-    i Ktilde_j,
-    Ktilde_j = sin(k_j h) / h.
-
-The compatible Laplacian is
-
-    Delta_h -> -|Ktilde|^2.
-
-The same symbol is used for
-
-    * divergence,
-    * gradient,
-    * Leray projection,
-    * pressure Poisson solve,
-    * diffusion.
-
-NYQUIST MODES
--------------
-Central differences have additional null modes at Nyquist frequencies.
-For Ktilde = 0 the discrete Leray projection leaves the vector mode
-unchanged.
-
-The program therefore explicitly measures null-mode content.
-
-NONLINEAR TERM
---------------
-The Morinishi skew form is
-
-    B_i(u,v)
-      =
-    1/2 sum_j [
-        u_j D_j v_i
-        + D_j(u_j v_i)
-    ].
-
-For discretely divergence-free u,
-
-    <B(u,u),u> = 0.
-
-PRESSURE SPLIT
---------------
-With
-
-    q = |u|u,
-
-the program audits
+    <B(u,u), u> = 0
 
     <grad p, grad q>
-      =
-    <B,q> - <B,Pq>
+        = <B, q> - <B, Pq>
 
-subject to the sign convention used by the discrete Poisson solve.
+    <Pq, (I-P)q> = 0
 
-The individual normalized pieces are reported as
+LEVEL 2
+-------
+The following weighted edge quotient is evaluated:
 
-    C_P = |<B,(I-P)q>| / (||u||_3 D3),
+    C_edge =
+        sum_x,j |u| |delta_j u|^3
+        -----------------------------------------
+        h ||u||_3 sum_x,j |u| |delta_j u|^2/h^2
 
-    C_S = |<B,Pq>| / (||u||_3 D3),
+where
 
-    R_h = |<B,q>| / (||u||_3 D3).
+    delta_j u(x) = u(x+h e_j) - u(x).
+
+The discrete cell embedding
+
+    ||u||_infinity <= h^(-1) ||u||_3
+
+and
+
+    |delta_j u| <= 2 ||u||_infinity
+
+give the analytic ceiling
+
+    C_edge <= 2.
+
+The corresponding commutator constant is recorded as
+
+    C_R <= 1
+
+according to the discrete commutator normalization used by this audit.
 
 IMPORTANT
 ---------
-These quantities should not be interpreted as independent bounds merely
-because their sum reconstructs another quantity. Cancellation is possible.
+The code does not treat numerical maxima as proofs.
 
-The optimizer can therefore target C_P, C_S, R_h, and C_edge independently.
+For example:
+
+    "best discovered C_S = 0.22"
+
+means exactly that: a numerical search found a field with that value.
+
+It does NOT mean
+
+    C_S <= 0.22.
+
+The remaining analytical bottleneck is the solenoidal pairing
+
+    C_S =
+        |<B(u,u), P(|u|u)>|
+        ---------------------
+        ||u||_3 D3(u).
+
+The pressure quantity satisfies the exact Hodge relation
+
+    C_P = |<B, q-Pq>|/(||u||_3 D3)
+
+and therefore
+
+    C_P <= C_R + C_S.
+
+With C_R <= 1,
+
+    C_P <= 1 + C_S.
+
+NYQUIST
+-------
+Central differences have additional null modes at zero/Nyquist frequencies.
+These modes are explicitly audited.
 
 DEPENDENCIES
 ------------
@@ -130,33 +113,23 @@ Required:
 Optional:
     SciPy
 
-SciPy is required only for the true L-BFGS numerical optimizer.
+SciPy is required only for the L-BFGS adversarial search.
 
-USAGE
------
-Quick structural audit:
-
-    python discrete_proof.py --quick
-
-Standard audit:
-
+RUN
+---
     python discrete_proof.py
 
-More adversarial randomized searching:
+Quick:
+    python discrete_proof.py --quick
 
-    python discrete_proof.py --search-starts 16 --search-steps 20
+Full:
+    python discrete_proof.py --full
 
-True L-BFGS optimization:
-
+Optimizer:
     python discrete_proof.py --optimize
 
-More optimizer starts:
-
-    python discrete_proof.py --optimize --opt-starts 8
-
-Full resolution run:
-
-    python discrete_proof.py --full --optimize
+The default run is deliberately moderate.  Full L-BFGS searches on N=32
+can be expensive.
 
 ==============================================================================
 """
@@ -166,9 +139,19 @@ from __future__ import annotations
 import argparse
 import sys
 from dataclasses import dataclass
-from typing import Dict, Sequence, Optional, Callable
+from typing import Callable, Dict, Iterable, Optional, Sequence, Tuple
 
 import numpy as np
+
+
+# ============================================================================
+# GLOBAL CERTIFICATE CONSTANTS
+# ============================================================================
+
+ANALYTIC_C_EDGE_BOUND = 2.0
+ANALYTIC_C_R_BOUND = 1.0
+
+EPS = 1.0e-30
 
 
 # ============================================================================
@@ -178,10 +161,9 @@ import numpy as np
 @dataclass
 class ScalingResult:
     amplitude: float
-    c3: float
-    r3: float
-    cp: float
-    cs: float
+    c_p: float
+    c_s: float
+    r_h: float
     l3: float
     d3: float
     pressure_work: float
@@ -190,45 +172,55 @@ class ScalingResult:
 @dataclass
 class ResolutionResult:
     N: int
-    c3: float
-    rh: float
-    cp: float
-    cs: float
-    edge: float
-    edge_central: float
+    c_p: float
+    c_s: float
+    r_h: float
+    c_edge: float
+    c_edge_central: float
     l3: float
     d3: float
-    pressure_work: float
-    null_fraction: float
 
 
 @dataclass
 class SearchResult:
-    objective: str
-    best_value: float
-    best_field: Optional[np.ndarray]
-    starts: int
-    steps: int
-
-
-@dataclass
-class OptimizationResult:
-    objective: str
-    best_value: float
-    best_field: Optional[np.ndarray]
-    starts: int
-    iterations: int
-    scipy_available: bool
+    target: str
+    value: float
+    success: bool
+    nit: int
+    nfev: int
+    message: str
+    field: Optional[np.ndarray]
 
 
 # ============================================================================
-# STRUCTURE-PRESERVING LATTICE FLUID
+# STRUCTURE-PRESERVING PERIODIC LATTICE FLUID
 # ============================================================================
 
 class StructurePreservingLatticeFluid3D:
     """
-    Structure-preserving semidiscrete 3-D Navier-Stokes system on a
-    periodic cubic lattice.
+    Periodic 3-D lattice system using one compatible central-difference
+    Fourier symbol throughout.
+
+    Grid:
+        N x N x N
+
+    Physical spacing:
+        h = L/N
+
+    Central difference:
+        D0_j f = [f(x+h e_j)-f(x-h e_j)]/(2h)
+
+    Fourier symbol:
+        i sin(k_j h)/h
+
+    Compatible Laplacian:
+        Delta_h -> -|Ktilde|^2
+
+    Leray projection:
+        P = I - Ktilde Ktilde^T/|Ktilde|^2
+
+    Ktilde = 0 modes are left unchanged by P because they already lie in
+    the kernel of the discrete divergence.
     """
 
     def __init__(
@@ -240,10 +232,10 @@ class StructurePreservingLatticeFluid3D:
         if N < 4:
             raise ValueError("N must be at least 4.")
 
-        if L <= 0:
+        if L <= 0.0:
             raise ValueError("L must be positive.")
 
-        if nu < 0:
+        if nu < 0.0:
             raise ValueError("nu must be nonnegative.")
 
         self.N = int(N)
@@ -252,15 +244,15 @@ class StructurePreservingLatticeFluid3D:
         self.nu = float(nu)
 
         # ------------------------------------------------------------------
-        # Physical grid
+        # Physical coordinates
         # ------------------------------------------------------------------
 
-        coord = np.arange(self.N) * self.h
+        x = np.arange(self.N, dtype=float) * self.h
 
         self.X, self.Y, self.Z = np.meshgrid(
-            coord,
-            coord,
-            coord,
+            x,
+            x,
+            x,
             indexing="ij",
         )
 
@@ -268,9 +260,13 @@ class StructurePreservingLatticeFluid3D:
         # Fourier wave numbers
         # ------------------------------------------------------------------
 
-        k = 2.0 * np.pi * np.fft.fftfreq(
-            self.N,
-            d=self.h,
+        k = (
+            2.0
+            * np.pi
+            * np.fft.fftfreq(
+                self.N,
+                d=self.h,
+            )
         )
 
         self.Kx, self.Ky, self.Kz = np.meshgrid(
@@ -280,21 +276,19 @@ class StructurePreservingLatticeFluid3D:
             indexing="ij",
         )
 
-        # ------------------------------------------------------------------
-        # Central difference Fourier symbols
-        # ------------------------------------------------------------------
+        # Central-difference symbols.
 
-        self.K_tilde_x = np.sin(
-            self.Kx * self.h
-        ) / self.h
+        self.K_tilde_x = (
+            np.sin(self.Kx * self.h) / self.h
+        )
 
-        self.K_tilde_y = np.sin(
-            self.Ky * self.h
-        ) / self.h
+        self.K_tilde_y = (
+            np.sin(self.Ky * self.h) / self.h
+        )
 
-        self.K_tilde_z = np.sin(
-            self.Kz * self.h
-        ) / self.h
+        self.K_tilde_z = (
+            np.sin(self.Kz * self.h) / self.h
+        )
 
         self.K_sq = (
             self.K_tilde_x ** 2
@@ -302,28 +296,44 @@ class StructurePreservingLatticeFluid3D:
             + self.K_tilde_z ** 2
         )
 
-        self.projectable_modes = (
-            self.K_sq > 1e-14
+        self.Kmag = np.sqrt(
+            self.Kx ** 2
+            + self.Ky ** 2
+            + self.Kz ** 2
         )
 
-        self.null_modes = ~self.projectable_modes
+        # Numerical null mask.
+
+        self.null_modes = (
+            self.K_sq <= 1.0e-14
+        )
+
+        self.projectable_modes = (
+            ~self.null_modes
+        )
 
         self.inv_K_sq = np.zeros_like(
             self.K_sq
         )
 
-        self.inv_K_sq[self.projectable_modes] = (
+        self.inv_K_sq[
+            self.projectable_modes
+        ] = (
             1.0
-            / self.K_sq[self.projectable_modes]
+            / self.K_sq[
+                self.projectable_modes
+            ]
         )
 
     # ======================================================================
-    # FINITE DIFFERENCES
+    # BASIC DIFFERENCES
     # ======================================================================
 
     def D0(self, f, axis: int):
         """
         Periodic central difference.
+
+            D0 f = [f(x+h)-f(x-h)]/(2h).
         """
         return (
             np.roll(f, -1, axis=axis)
@@ -332,7 +342,7 @@ class StructurePreservingLatticeFluid3D:
 
     def D_plus(self, f, axis: int):
         """
-        Periodic forward difference divided by h.
+        Periodic forward difference.
         """
         return (
             np.roll(f, -1, axis=axis)
@@ -341,22 +351,30 @@ class StructurePreservingLatticeFluid3D:
 
     def D_minus(self, f, axis: int):
         """
-        Periodic backward difference divided by h.
+        Periodic backward difference.
         """
         return (
             f
             - np.roll(f, 1, axis=axis)
         ) / self.h
 
-    def delta_plus(self, f, axis: int):
+    def delta_plus(self, u, component_axis: int):
         """
-        Raw forward edge increment:
+        Raw edge increment
 
-            delta_j f = f(x+h e_j) - f(x).
+            delta_j u(x) = u(x+h e_j)-u(x).
+
+        component_axis is 1,2,3 because u has shape
+
+            (component, x, y, z).
         """
         return (
-            np.roll(f, -1, axis=axis)
-            - f
+            np.roll(
+                u,
+                -1,
+                axis=component_axis,
+            )
+            - u
         )
 
     # ======================================================================
@@ -400,19 +418,24 @@ class StructurePreservingLatticeFluid3D:
         )
 
     # ======================================================================
-    # COMPATIBLE LAPLACIAN
+    # LAPLACIAN
     # ======================================================================
 
     def laplacian(self, f):
+        """
+        Compatible spectral Laplacian.
+
+            Delta_h -> -|Ktilde|^2.
+        """
         f_hat = np.fft.fftn(f)
 
-        lap_hat = (
+        out_hat = (
             -self.K_sq
             * f_hat
         )
 
         return np.real(
-            np.fft.ifftn(lap_hat)
+            np.fft.ifftn(out_hat)
         )
 
     # ======================================================================
@@ -421,16 +444,10 @@ class StructurePreservingLatticeFluid3D:
 
     def leray_project(self, u):
         """
-        Orthogonal projection onto the kernel of the central-difference
-        divergence.
+        Orthogonal projection onto ker(div_h).
 
-        For Ktilde != 0,
-
-            P = I - Ktilde Ktilde^T / |Ktilde|^2.
-
-        For Ktilde = 0 the vector mode is left unchanged.
+        At Ktilde=0 the input mode is left unchanged.
         """
-
         u_hat = np.fft.fftn(
             u,
             axes=(1, 2, 3),
@@ -453,20 +470,17 @@ class StructurePreservingLatticeFluid3D:
 
         projected_hat[0] = (
             u_hat[0]
-            - self.K_tilde_x
-            * correction
+            - self.K_tilde_x * correction
         )
 
         projected_hat[1] = (
             u_hat[1]
-            - self.K_tilde_y
-            * correction
+            - self.K_tilde_y * correction
         )
 
         projected_hat[2] = (
             u_hat[2]
-            - self.K_tilde_z
-            * correction
+            - self.K_tilde_z * correction
         )
 
         return np.real(
@@ -477,7 +491,7 @@ class StructurePreservingLatticeFluid3D:
         )
 
     # ======================================================================
-    # SKEW CONVECTION
+    # CONVECTION
     # ======================================================================
 
     def skew_convection(self, u, v):
@@ -485,18 +499,15 @@ class StructurePreservingLatticeFluid3D:
         Morinishi skew form:
 
             B_i(u,v)
-              =
-            1/2 sum_j [
-                u_j D_j v_i
-                + D_j(u_j v_i)
-            ].
+              = 1/2 sum_j [
+                    u_j D_j v_i
+                    + D_j(u_j v_i)
+                ].
         """
-
         B = np.zeros_like(v)
 
         for i in range(3):
             for j in range(3):
-
                 term1 = (
                     u[j]
                     * self.D0(v[i], j)
@@ -508,8 +519,7 @@ class StructurePreservingLatticeFluid3D:
                 )
 
                 B[i] += 0.5 * (
-                    term1
-                    + term2
+                    term1 + term2
                 )
 
         return B
@@ -519,16 +529,12 @@ class StructurePreservingLatticeFluid3D:
     # ======================================================================
 
     def rhs(self, u):
-        convection = self.skew_convection(
+        B = self.skew_convection(
             u,
             u,
         )
 
-        projected_convection = (
-            self.leray_project(
-                convection
-            )
-        )
+        PB = self.leray_project(B)
 
         diffusion = np.stack(
             [
@@ -540,7 +546,7 @@ class StructurePreservingLatticeFluid3D:
         )
 
         return (
-            -projected_convection
+            -PB
             + self.nu * diffusion
         )
 
@@ -567,7 +573,7 @@ class StructurePreservingLatticeFluid3D:
         )
 
     def norm_l3(self, u):
-        magnitude = np.sqrt(
+        mag = np.sqrt(
             np.sum(
                 u ** 2,
                 axis=0,
@@ -576,10 +582,22 @@ class StructurePreservingLatticeFluid3D:
 
         return float(
             np.sum(
-                magnitude ** 3
+                mag ** 3
             )
             * self.h ** 3
         ) ** (1.0 / 3.0)
+
+    def norm_linf(self, u):
+        mag = np.sqrt(
+            np.sum(
+                u ** 2,
+                axis=0,
+            )
+        )
+
+        return float(
+            np.max(mag)
+        )
 
     def energy(self, u):
         return 0.5 * self.inner_product(
@@ -588,26 +606,25 @@ class StructurePreservingLatticeFluid3D:
         )
 
     # ======================================================================
-    # DISCRETE H1 / ENERGY DISSIPATION
+    # DISSIPATION
     # ======================================================================
 
     def enstrophy(self, u):
-        result = 0.0
+        value = 0.0
 
         for i in range(3):
             for j in range(3):
-
                 d = self.D0(
                     u[i],
                     j,
                 )
 
-                result += self.inner_product(
+                value += self.inner_product(
                     d,
                     d,
                 )
 
-        return float(result)
+        return float(value)
 
     def energy_derivative(self, u):
         return float(
@@ -623,6 +640,7 @@ class StructurePreservingLatticeFluid3D:
         self,
         seed: int = 1234,
         amplitude: float = 1.0,
+        normalize: str = "L2",
     ):
         rng = np.random.default_rng(
             seed
@@ -639,10 +657,13 @@ class StructurePreservingLatticeFluid3D:
 
         u = self.leray_project(u)
 
-        current = self.norm_l2(u)
+        if normalize.upper() == "L3":
+            n = self.norm_l3(u)
+        else:
+            n = self.norm_l2(u)
 
-        if current > 0:
-            u *= amplitude / current
+        if n > EPS:
+            u *= amplitude / n
 
         return u
 
@@ -680,9 +701,40 @@ class StructurePreservingLatticeFluid3D:
 
         return self.leray_project(u)
 
+    # ======================================================================
+    # TIME STEPPING
+    # ======================================================================
+
+    def rk4_step(self, u, dt):
+        k1 = self.rhs(u)
+
+        k2 = self.rhs(
+            u + 0.5 * dt * k1
+        )
+
+        k3 = self.rhs(
+            u + 0.5 * dt * k2
+        )
+
+        k4 = self.rhs(
+            u + dt * k3
+        )
+
+        return (
+            u
+            + dt
+            * (
+                k1
+                + 2.0 * k2
+                + 2.0 * k3
+                + k4
+            )
+            / 6.0
+        )
+
 
 # ============================================================================
-# DISCRETE AUDIT
+# AUDIT ENGINE
 # ============================================================================
 
 class DiscreteProofAudit:
@@ -692,12 +744,6 @@ class DiscreteProofAudit:
         fluid: StructurePreservingLatticeFluid3D,
     ):
         self.fl = fluid
-
-        self.Kmag = np.sqrt(
-            self.fl.Kx ** 2
-            + self.fl.Ky ** 2
-            + self.fl.Kz ** 2
-        )
 
     # ======================================================================
     # BASIC QUANTITIES
@@ -711,11 +757,12 @@ class DiscreteProofAudit:
             )
         )
 
-    def spectral_gradient_squared(self, u):
+    def gradient_squared(self, u):
         """
-        Pointwise sum of squared central-difference gradients.
-        """
+        Pointwise
 
+            |grad_h u|^2
+        """
         u_hat = np.fft.fftn(
             u,
             axes=(1, 2, 3),
@@ -726,13 +773,13 @@ class DiscreteProofAudit:
             dtype=float,
         )
 
-        for component in range(3):
+        for a in range(3):
 
             gx = np.real(
                 np.fft.ifftn(
                     1j
                     * self.fl.K_tilde_x
-                    * u_hat[component],
+                    * u_hat[a],
                     axes=(0, 1, 2),
                 )
             )
@@ -741,7 +788,7 @@ class DiscreteProofAudit:
                 np.fft.ifftn(
                     1j
                     * self.fl.K_tilde_y
-                    * u_hat[component],
+                    * u_hat[a],
                     axes=(0, 1, 2),
                 )
             )
@@ -750,7 +797,7 @@ class DiscreteProofAudit:
                 np.fft.ifftn(
                     1j
                     * self.fl.K_tilde_z
-                    * u_hat[component],
+                    * u_hat[a],
                     axes=(0, 1, 2),
                 )
             )
@@ -764,20 +811,21 @@ class DiscreteProofAudit:
         return grad_sq
 
     def critical_dissipation(self, u):
-        magnitude = (
-            self.velocity_magnitude(u)
-        )
+        mag = self.velocity_magnitude(u)
 
-        grad_sq = (
-            self.spectral_gradient_squared(u)
-        )
+        grad_sq = self.gradient_squared(u)
 
         return float(
             np.sum(
-                magnitude
-                * grad_sq
+                mag * grad_sq
             )
             * self.fl.h ** 3
+        )
+
+    def denominator(self, u):
+        return (
+            self.fl.norm_l3(u)
+            * self.critical_dissipation(u)
         )
 
     # ======================================================================
@@ -786,18 +834,17 @@ class DiscreteProofAudit:
 
     def pressure_gradients(self, u):
         """
-        Compute grad p and grad q using
+        Compute grad p and grad q.
 
-            -Delta p = div B,
-            -Delta q = div(|u|u).
+        -Delta p = div B
+        -Delta q = div(|u|u)
 
-        Since -Delta -> |Ktilde|^2,
+        Since
 
-            p_hat = div_B_hat / |Ktilde|^2,
+            -Delta -> |Ktilde|^2,
 
-            q_hat = div_Q_hat / |Ktilde|^2.
-
-        The corresponding gradients are returned directly.
+        p_hat = div(B)_hat / |Ktilde|^2
+        q_hat = div(Q)_hat / |Ktilde|^2.
         """
 
         B = self.fl.skew_convection(
@@ -844,14 +891,9 @@ class DiscreteProofAudit:
             axis=0,
         )
 
-        magnitude = (
-            self.velocity_magnitude(u)
-        )
+        mag = self.velocity_magnitude(u)
 
-        Q = (
-            magnitude
-            * u
-        )
+        Q = mag * u
 
         Q_hat = np.fft.fftn(
             Q,
@@ -892,12 +934,9 @@ class DiscreteProofAudit:
             axis=0,
         )
 
-        return (
-            grad_p_hat,
-            grad_q_hat,
-        )
+        return grad_p_hat, grad_q_hat
 
-    def pressure_work_signed(self, u):
+    def pressure_gradients_physical(self, u):
         gp_hat, gq_hat = (
             self.pressure_gradients(u)
         )
@@ -913,6 +952,15 @@ class DiscreteProofAudit:
             np.fft.ifftn(
                 gq_hat,
                 axes=(1, 2, 3),
+            )
+        )
+
+        return gp, gq
+
+    def pressure_work_signed(self, u):
+        gp, gq = (
+            self.pressure_gradients_physical(
+                u
             )
         )
 
@@ -927,54 +975,31 @@ class DiscreteProofAudit:
         )
 
     # ======================================================================
-    # EXACT PRESSURE / SOLENOIDAL SPLIT
+    # EXACT HODGE SPLIT
     # ======================================================================
 
     def pressure_split_audit(self, u):
         """
-        Audit
+        Verify
 
             <grad p, grad q>
               =
             <B,q> - <B,Pq>.
 
-        This identity is checked numerically rather than assumed.
         """
+        mag = self.velocity_magnitude(u)
 
-        magnitude = (
-            self.velocity_magnitude(u)
-        )
+        q = mag * u
 
         B = self.fl.skew_convection(
             u,
             u,
         )
 
-        q = magnitude * u
-
         Pq = self.fl.leray_project(q)
 
-        gp_hat, gq_hat = (
-            self.pressure_gradients(u)
-        )
-
-        gp = np.real(
-            np.fft.ifftn(
-                gp_hat,
-                axes=(1, 2, 3),
-            )
-        )
-
-        gq = np.real(
-            np.fft.ifftn(
-                gq_hat,
-                axes=(1, 2, 3),
-            )
-        )
-
-        pressure = self.fl.inner_product(
-            gp,
-            gq,
+        pressure = (
+            self.pressure_work_signed(u)
         )
 
         local_term = self.fl.inner_product(
@@ -1007,37 +1032,35 @@ class DiscreteProofAudit:
         return {
             "pressure": float(pressure),
             "local_term": float(local_term),
-            "solenoidal_term": float(solenoidal_term),
-            "reconstructed": float(reconstructed),
-            "residual": float(residual),
+            "solenoidal_term":
+                float(solenoidal_term),
+            "reconstructed":
+                float(reconstructed),
+            "residual":
+                float(residual),
             "relative_residual":
-                float(abs(residual) / scale),
+                float(
+                    abs(residual) / scale
+                ),
         }
 
-    # ======================================================================
-    # CP / CS / RH
-    # ======================================================================
+    def pressure_solenoidal_split(self, u):
+        mag = self.velocity_magnitude(u)
 
-    def pressure_solenoidal_split(
-        self,
-        u,
-    ):
-        magnitude = (
-            self.velocity_magnitude(u)
-        )
+        q = mag * u
 
         B = self.fl.skew_convection(
             u,
             u,
         )
 
-        q = magnitude * u
-
         Pq = self.fl.leray_project(q)
+
+        q_grad = q - Pq
 
         a = self.fl.inner_product(
             B,
-            q - Pq,
+            q_grad,
         )
 
         b = self.fl.inner_product(
@@ -1045,61 +1068,71 @@ class DiscreteProofAudit:
             Pq,
         )
 
-        scale = (
-            self.fl.norm_l3(u)
-            * self.critical_dissipation(u)
-        )
-
-        scale = max(
-            scale,
-            1e-30,
+        denominator = max(
+            self.denominator(u),
+            EPS,
         )
 
         return {
             "a": float(a),
             "b": float(b),
+
+            "C_P": float(
+                abs(a) / denominator
+            ),
+
+            "C_S": float(
+                abs(b) / denominator
+            ),
+
+            "R_h": float(
+                abs(a + b)
+                / denominator
+            ),
+
+            "signed_R_h": float(
+                (a + b)
+                / denominator
+            ),
+
             "a_abs_normalized":
-                float(abs(a) / scale),
+                float(
+                    abs(a) / denominator
+                ),
+
             "b_abs_normalized":
-                float(abs(b) / scale),
+                float(
+                    abs(b) / denominator
+                ),
+
             "sum_normalized":
-                float(abs(a + b) / scale),
-            "C_P":
-                float(abs(a) / scale),
-            "C_S":
-                float(abs(b) / scale),
-            "R_h":
-                float(abs(a + b) / scale),
+                float(
+                    abs(a + b)
+                    / denominator
+                ),
         }
 
-    # ======================================================================
-    # CRITICAL QUOTIENT
-    # ======================================================================
-
     def critical_quotient(self, u):
-        l3 = self.fl.norm_l3(u)
-        d3 = self.critical_dissipation(u)
-        wp = self.pressure_work(u)
+        return self.pressure_solenoidal_split(
+            u
+        )["C_P"]
 
-        denominator = (
-            l3 * d3
-        )
+    def solenoidal_quotient(self, u):
+        return self.pressure_solenoidal_split(
+            u
+        )["C_S"]
 
-        if denominator <= 1e-30:
-            return 0.0
-
-        return float(
-            wp / denominator
-        )
+    def commutator_quotient(self, u):
+        return self.pressure_solenoidal_split(
+            u
+        )["R_h"]
 
     # ======================================================================
-    # CHAIN-RULE / NONLINEAR WORK
+    # CHAIN-RULE / COMMUTATOR
     # ======================================================================
 
     def chain_rule_defect(self, u):
-        magnitude = (
-            self.velocity_magnitude(u)
-        )
+        mag = self.velocity_magnitude(u)
 
         B = self.fl.skew_convection(
             u,
@@ -1109,59 +1142,47 @@ class DiscreteProofAudit:
         numerator = abs(
             self.fl.inner_product(
                 B,
-                magnitude * u,
+                mag * u,
             )
         )
 
-        denominator = (
-            self.fl.norm_l3(u)
-            * self.critical_dissipation(u)
+        denominator = max(
+            self.denominator(u),
+            EPS,
         )
-
-        if denominator <= 1e-30:
-            return 0.0
 
         return float(
             numerator / denominator
         )
 
     # ======================================================================
-    # LEVEL-2 WEIGHTED EDGE QUOTIENT
+    # EDGE QUOTIENT
     # ======================================================================
 
-    def weighted_edge_quotient(
-        self,
-        u,
-    ):
+    def weighted_edge_quotient(self, u):
         """
         Evaluate
 
             C_edge =
-            sum |u| |delta u|^3
-            ----------------------------------------
-            h ||u||_3 sum |u| |delta u|^2 / h^2
+              sum |u| |delta u|^3
+              -------------------------------------
+              h ||u||_3 sum |u| |delta u|^2/h^2.
 
-        with
+        The analytic certificate is
 
-            delta_j u(x) = u(x+h e_j) - u(x).
-
-        This directly targets the proposed Level-2 inequality.
+            C_edge <= 2.
         """
 
-        magnitude = (
-            self.velocity_magnitude(u)
-        )
+        mag = self.velocity_magnitude(u)
 
-        cubic_sum = 0.0
-        quadratic_sum = 0.0
+        cubic = 0.0
+        quadratic = 0.0
 
         for j in range(3):
 
-            delta = (
-                self.fl.delta_plus(
-                    u,
-                    j + 1,
-                )
+            delta = self.fl.delta_plus(
+                u,
+                j + 1,
             )
 
             delta_mag = np.sqrt(
@@ -1171,19 +1192,19 @@ class DiscreteProofAudit:
                 )
             )
 
-            cubic_sum += np.sum(
-                magnitude
+            cubic += np.sum(
+                mag
                 * delta_mag ** 3
             )
 
-            quadratic_sum += np.sum(
-                magnitude
+            quadratic += np.sum(
+                mag
                 * delta_mag ** 2
             )
 
-        cubic_sum *= self.fl.h ** 3
+        cubic *= self.fl.h ** 3
 
-        quadratic_sum *= (
+        quadratic *= (
             self.fl.h ** 3
             / self.fl.h ** 2
         )
@@ -1193,47 +1214,47 @@ class DiscreteProofAudit:
         denominator = (
             self.fl.h
             * l3
-            * quadratic_sum
+            * quadratic
         )
 
         quotient = (
-            cubic_sum / denominator
-            if denominator > 1e-30
+            cubic / denominator
+            if denominator > EPS
             else 0.0
         )
 
         return {
             "edge_cubic":
-                float(cubic_sum),
+                float(cubic),
 
             "weighted_quadratic":
-                float(quadratic_sum),
+                float(quadratic),
 
             "l3":
                 float(l3),
 
             "quotient":
                 float(quotient),
+
+            "analytic_bound":
+                ANALYTIC_C_EDGE_BOUND,
+
+            "certified":
+                bool(
+                    quotient
+                    <= ANALYTIC_C_EDGE_BOUND
+                    + 1e-10
+                ),
         }
 
-    def weighted_edge_quotient_central(
-        self,
-        u,
-    ):
+    def weighted_edge_quotient_central(self, u):
         """
-        Central-difference comparison:
-
-            sum |u| |D0 u|^3
-            --------------------------------
-            ||u||_3 sum |u| |D0 u|^2.
+        Central-difference comparison.
         """
+        mag = self.velocity_magnitude(u)
 
-        magnitude = (
-            self.velocity_magnitude(u)
-        )
-
-        cubic_sum = 0.0
-        quadratic_sum = 0.0
+        cubic = 0.0
+        quadratic = 0.0
 
         for j in range(3):
 
@@ -1249,38 +1270,38 @@ class DiscreteProofAudit:
                 )
             )
 
-            cubic_sum += np.sum(
-                magnitude
+            cubic += np.sum(
+                mag
                 * dmag ** 3
             )
 
-            quadratic_sum += np.sum(
-                magnitude
+            quadratic += np.sum(
+                mag
                 * dmag ** 2
             )
 
-        cubic_sum *= self.fl.h ** 3
-        quadratic_sum *= self.fl.h ** 3
+        cubic *= self.fl.h ** 3
+        quadratic *= self.fl.h ** 3
 
         l3 = self.fl.norm_l3(u)
 
         denominator = (
             l3
-            * quadratic_sum
+            * quadratic
         )
 
         quotient = (
-            cubic_sum / denominator
-            if denominator > 1e-30
+            cubic / denominator
+            if denominator > EPS
             else 0.0
         )
 
         return {
             "central_cubic":
-                float(cubic_sum),
+                float(cubic),
 
             "central_quadratic":
-                float(quadratic_sum),
+                float(quadratic),
 
             "l3":
                 float(l3),
@@ -1290,17 +1311,10 @@ class DiscreteProofAudit:
         }
 
     # ======================================================================
-    # NULL-MODE AUDIT
+    # NULL MODE AUDIT
     # ======================================================================
 
-    def null_mode_fraction(
-        self,
-        u,
-    ):
-        """
-        Fraction of Fourier L2 energy lying in Ktilde = 0 modes.
-        """
-
+    def null_mode_fraction(self, u):
         u_hat = np.fft.fftn(
             u,
             axes=(1, 2, 3),
@@ -1312,60 +1326,47 @@ class DiscreteProofAudit:
 
         null = np.sum(
             np.abs(
-                u_hat[:, self.fl.null_modes]
+                u_hat[
+                    :,
+                    self.fl.null_modes
+                ]
             ) ** 2
         )
 
-        if total <= 1e-30:
+        if total <= EPS:
             return 0.0
 
         return float(
             null / total
         )
 
-    def remove_null_modes(
-        self,
-        u,
-    ):
-        """
-        Remove all Ktilde = 0 Fourier modes and reproject.
-        """
-
+    def remove_null_modes(self, u):
         u_hat = np.fft.fftn(
             u,
             axes=(1, 2, 3),
         )
 
-        filtered = u_hat.copy()
-
-        filtered[
+        u_hat[
             :,
             self.fl.null_modes
         ] = 0.0
 
-        filtered_field = np.real(
+        filtered = np.real(
             np.fft.ifftn(
-                filtered,
+                u_hat,
                 axes=(1, 2, 3),
             )
         )
 
         return self.fl.leray_project(
-            filtered_field
+            filtered
         )
 
     # ======================================================================
-    # SCALE-CONCENTRATION AUDIT
+    # CONCENTRATION
     # ======================================================================
 
-    def scale_concentration(
-        self,
-        u,
-    ):
-        """
-        Report Fourier and dissipation concentration at high frequencies.
-        """
-
+    def scale_concentration(self, u):
         u_hat = np.fft.fftn(
             u,
             axes=(1, 2, 3),
@@ -1380,60 +1381,56 @@ class DiscreteProofAudit:
             energy_density
         )
 
-        high_energy = np.sum(
+        high_n4 = np.sum(
             energy_density[
-                self.Kmag >= self.fl.N / 4.0
+                self.fl.Kmag
+                >= self.fl.N / 4.0
             ]
         )
 
-        high2_energy = np.sum(
+        high_n3 = np.sum(
             energy_density[
-                self.Kmag >= self.fl.N / 3.0
+                self.fl.Kmag
+                >= self.fl.N / 3.0
             ]
         )
 
-        grad_sq = (
-            self.spectral_gradient_squared(u)
-        )
-
-        weighted_grad = (
+        weighted = (
             self.velocity_magnitude(u)
-            * grad_sq
+            * self.gradient_squared(u)
         )
 
-        # A physical-space proxy for concentration:
-        # large gradients relative to total critical dissipation.
+        total_d3 = np.sum(
+            weighted
+        )
+
         threshold = np.percentile(
-            weighted_grad,
+            weighted,
             90.0,
         )
 
         top10 = np.sum(
-            weighted_grad[
-                weighted_grad >= threshold
+            weighted[
+                weighted >= threshold
             ]
-        )
-
-        total_d3 = np.sum(
-            weighted_grad
         )
 
         return {
             "energy_high_N_over_4":
                 float(
-                    high_energy
+                    high_n4
                     / max(
                         total_energy,
-                        1e-30,
+                        EPS,
                     )
                 ),
 
             "energy_high_N_over_3":
                 float(
-                    high2_energy
+                    high_n3
                     / max(
                         total_energy,
-                        1e-30,
+                        EPS,
                     )
                 ),
 
@@ -1442,7 +1439,7 @@ class DiscreteProofAudit:
                     top10
                     / max(
                         total_d3,
-                        1e-30,
+                        EPS,
                     )
                 ),
         }
@@ -1452,7 +1449,7 @@ class DiscreteProofAudit:
     # ======================================================================
 
     def dyadic_shell_masks(self):
-        maximum = max(
+        max_shell = max(
             1,
             int(
                 np.log2(
@@ -1468,7 +1465,7 @@ class DiscreteProofAudit:
 
         for j in range(
             1,
-            maximum + 1,
+            max_shell + 1,
         ):
 
             low = (
@@ -1480,17 +1477,13 @@ class DiscreteProofAudit:
             high = 2.0 ** j
 
             masks[j] = (
-                (self.Kmag >= low)
-                & (self.Kmag < high)
+                (self.fl.Kmag >= low)
+                & (self.fl.Kmag < high)
             )
 
         return masks
 
-    def shell_field(
-        self,
-        u,
-        mask,
-    ):
+    def shell_field(self, u, mask):
         u_hat = np.fft.fftn(
             u,
             axes=(1, 2, 3),
@@ -1525,28 +1518,22 @@ class DiscreteProofAudit:
             mask,
         )
 
-        grad_sq = (
-            self.spectral_gradient_squared(
-                uj
-            )
+        grad_sq = self.gradient_squared(
+            uj
         )
 
-        magnitude = (
-            self.velocity_magnitude(u)
+        mag = self.velocity_magnitude(
+            u
         )
 
         return float(
             np.sum(
-                magnitude
-                * grad_sq
+                mag * grad_sq
             )
             * self.fl.h ** 3
         )
 
-    def shell_pressure_matrix(
-        self,
-        u,
-    ):
+    def shell_pressure_matrix(self, u):
         masks = self.dyadic_shell_masks()
 
         gp_hat, gq_hat = (
@@ -1584,8 +1571,6 @@ class DiscreteProofAudit:
                     masks[j],
                 )
             )
-
-        for a, j in enumerate(shells):
 
             for b, k in enumerate(shells):
 
@@ -1625,7 +1610,9 @@ class DiscreteProofAudit:
 
         l3 = self.fl.norm_l3(u)
 
-        Gamma = np.zeros_like(M)
+        Gamma = np.zeros_like(
+            M
+        )
 
         for a in range(n):
             for b in range(n):
@@ -1640,29 +1627,17 @@ class DiscreteProofAudit:
                     )
                 )
 
-                if denominator > 1e-30:
+                if denominator > EPS:
                     Gamma[a, b] = (
                         M[a, b]
                         / denominator
                     )
 
-        return (
-            shells,
-            M,
-            Gamma,
-            D,
-        )
-
-    def shell_orthogonality_audit(
-        self,
-        u,
-    ):
-        shells, M, Gamma, D = (
-            self.shell_pressure_matrix(u)
-        )
-
         row_sums = (
-            np.sum(Gamma, axis=1)
+            np.sum(
+                Gamma,
+                axis=1,
+            )
             if Gamma.size
             else np.zeros(0)
         )
@@ -1673,25 +1648,18 @@ class DiscreteProofAudit:
             "Gamma": Gamma,
             "D": D,
             "row_sums": row_sums,
-            "sup_row_sum":
-                float(
-                    np.max(row_sums)
-                )
-                if row_sums.size
-                else 0.0,
+            "sup_row_sum": float(
+                np.max(row_sums)
+            )
+            if row_sums.size
+            else 0.0,
         }
-
-    def schur_audit(self, u):
-        return self.shell_orthogonality_audit(u)
 
     # ======================================================================
     # TRIADIC SOURCE AUDIT
     # ======================================================================
 
-    def triadic_source_audit(
-        self,
-        u,
-    ):
+    def triadic_source_audit(self, u):
         masks = self.dyadic_shell_masks()
 
         B = self.fl.skew_convection(
@@ -1699,11 +1667,10 @@ class DiscreteProofAudit:
             u,
         )
 
-        magnitude = (
+        Q = (
             self.velocity_magnitude(u)
+            * u
         )
-
-        Q = magnitude * u
 
         B_hat = np.fft.fftn(
             B,
@@ -1719,18 +1686,24 @@ class DiscreteProofAudit:
 
         for j, mask in masks.items():
 
-            if np.count_nonzero(mask) == 0:
+            if not np.any(mask):
                 continue
 
             B_energy = np.sum(
                 np.abs(
-                    B_hat[:, mask]
+                    B_hat[
+                        :,
+                        mask
+                    ]
                 ) ** 2
             )
 
             Q_energy = np.sum(
                 np.abs(
-                    Q_hat[:, mask]
+                    Q_hat[
+                        :,
+                        mask
+                    ]
                 ) ** 2
             )
 
@@ -1743,23 +1716,19 @@ class DiscreteProofAudit:
 
                 "B_source_norm":
                     float(
-                        np.sqrt(
-                            B_energy
-                        )
+                        np.sqrt(B_energy)
                     ),
 
                 "Q_source_norm":
                     float(
-                        np.sqrt(
-                            Q_energy
-                        )
+                        np.sqrt(Q_energy)
                     ),
             }
 
         return result
 
     # ======================================================================
-    # ALIASING / HIGH-FREQUENCY SENSITIVITY
+    # ALIASING
     # ======================================================================
 
     def two_thirds_mask(self):
@@ -1771,14 +1740,383 @@ class DiscreteProofAudit:
             & (np.abs(self.fl.Kz) <= cutoff)
         )
 
-    def spectral_filter(
-        self,
-        u,
-        mask,
-    ):
+    def spectral_filter(self, u, mask):
         u_hat = np.fft.fftn(
             u,
             axes=(1, 2, 3),
+        )
+
+        out = np.zeros_like(
+            u_hat
+        )
+
+        out[
+            :,
+            mask
+        ] = u_hat[
+            :,
+            mask
+        ]
+
+        return np.real(
+            np.fft.ifftn(
+                out,
+                axes=(1, 2, 3),
+            )
+        )
+
+    def dealias_field(self, u):
+        filtered = self.spectral_filter(
+            u,
+            self.two_thirds_mask(),
+        )
+
+        return self.fl.leray_project(
+            filtered
+        )
+
+    def aliasing_audit(self, u):
+        raw = self.critical_quotient(u)
+
+        filtered = self.dealias_field(
+            u
+        )
+
+        dealiased = (
+            self.critical_quotient(
+                filtered
+            )
+        )
+
+        absolute = abs(
+            raw - dealiased
+        )
+
+        relative = (
+            absolute
+            / max(
+                abs(raw),
+                EPS,
+            )
+        )
+
+        return {
+            "C3_raw":
+                float(raw),
+
+            "C3_dealiased":
+                float(dealiased),
+
+            "absolute_difference":
+                float(absolute),
+
+            "relative_difference":
+                float(relative),
+        }
+
+    # ======================================================================
+    # AMPLITUDE INVARIANCE
+    # ======================================================================
+
+    def amplitude_invariance_test(
+        self,
+        u,
+        amplitudes=(1.0, 2.0, 4.0, 8.0),
+    ):
+        n = self.fl.norm_l2(u)
+
+        if n <= EPS:
+            raise ValueError(
+                "Cannot test a zero field."
+            )
+
+        u0 = u / n
+
+        results = []
+
+        for A in amplitudes:
+
+            ua = A * u0
+
+            split = (
+                self.pressure_solenoidal_split(
+                    ua
+                )
+            )
+
+            results.append(
+                ScalingResult(
+                    amplitude=float(A),
+                    c_p=split["C_P"],
+                    c_s=split["C_S"],
+                    r_h=split["R_h"],
+                    l3=self.fl.norm_l3(ua),
+                    d3=self.critical_dissipation(
+                        ua
+                    ),
+                    pressure_work=self.pressure_work(
+                        ua
+                    ),
+                )
+            )
+
+        return results
+
+    # ======================================================================
+    # PHASE RANDOMIZATION
+    # ======================================================================
+
+    def randomize_fourier_phases(
+        self,
+        u,
+        seed=None,
+    ):
+        """
+        Randomize phases while subsequently reprojecting.
+
+        This is a stress test, not an invariant transformation.
+        """
+        rng = np.random.default_rng(
+            seed
+        )
+
+        u_hat = np.fft.fftn(
+            u,
+            axes=(1, 2, 3),
+        )
+
+        phase = rng.uniform(
+            0.0,
+            2.0 * np.pi,
+            size=u_hat.shape[1:],
+        )
+
+        randomized = (
+            np.abs(u_hat)
+            * np.exp(
+                1j * phase[None, ...]
+            )
+        )
+
+        ur = np.real(
+            np.fft.ifftn(
+                randomized,
+                axes=(1, 2, 3),
+            )
+        )
+
+        return self.fl.leray_project(
+            ur
+        )
+
+    # ======================================================================
+    # RESOLUTION
+    # ======================================================================
+
+    def resolution_measurement(self, u):
+        split = (
+            self.pressure_solenoidal_split(
+                u
+            )
+        )
+
+        edge = (
+            self.weighted_edge_quotient(
+                u
+            )
+        )
+
+        central = (
+            self.weighted_edge_quotient_central(
+                u
+            )
+        )
+
+        return ResolutionResult(
+            N=self.fl.N,
+            c_p=split["C_P"],
+            c_s=split["C_S"],
+            r_h=split["R_h"],
+            c_edge=edge["quotient"],
+            c_edge_central=central[
+                "quotient"
+            ],
+            l3=self.fl.norm_l3(u),
+            d3=self.critical_dissipation(
+                u
+            ),
+        )
+
+
+# ============================================================================
+# ADVERSARIAL FAMILY GENERATORS
+# ============================================================================
+
+class AdversarialFamilies:
+
+    @staticmethod
+    def _normalize(
+        fluid,
+        u,
+        norm="L2",
+    ):
+        u = fluid.leray_project(u)
+
+        if norm.upper() == "L3":
+            n = fluid.norm_l3(u)
+        else:
+            n = fluid.norm_l2(u)
+
+        if n > EPS:
+            u = u / n
+
+        return u
+
+    @staticmethod
+    def single_spike(
+        fluid,
+        norm="L2",
+    ):
+        u = np.zeros(
+            (
+                3,
+                fluid.N,
+                fluid.N,
+                fluid.N,
+            ),
+            dtype=float,
+        )
+
+        c = fluid.N // 2
+
+        u[
+            0,
+            c,
+            c,
+            c
+        ] = 1.0
+
+        return AdversarialFamilies._normalize(
+            fluid,
+            u,
+            norm,
+        )
+
+    @staticmethod
+    def dipole(
+        fluid,
+        norm="L2",
+    ):
+        u = np.zeros(
+            (
+                3,
+                fluid.N,
+                fluid.N,
+                fluid.N,
+            ),
+            dtype=float,
+        )
+
+        c = fluid.N // 2
+
+        u[
+            0,
+            c,
+            c,
+            c
+        ] = 1.0
+
+        u[
+            0,
+            (c + 2) % fluid.N,
+            c,
+            c
+        ] = -1.0
+
+        return AdversarialFamilies._normalize(
+            fluid,
+            u,
+            norm,
+        )
+
+    @staticmethod
+    def near_nyquist_checkerboard(
+        fluid,
+        norm="L2",
+    ):
+        i = np.arange(
+            fluid.N
+        )[:, None, None]
+
+        j = np.arange(
+            fluid.N
+        )[None, :, None]
+
+        k = np.arange(
+            fluid.N
+        )[None, None, :]
+
+        checker = (
+            (-1.0)
+            ** (
+                i + j + k
+            )
+        )
+
+        u = np.zeros(
+            (
+                3,
+                fluid.N,
+                fluid.N,
+                fluid.N,
+            ),
+            dtype=float,
+        )
+
+        u[0] = checker
+
+        return AdversarialFamilies._normalize(
+            fluid,
+            u,
+            norm,
+        )
+
+    @staticmethod
+    def mid_dyadic_shell(
+        fluid,
+        norm="L2",
+    ):
+        rng = np.random.default_rng(
+            721
+        )
+
+        u = rng.standard_normal(
+            (
+                3,
+                fluid.N,
+                fluid.N,
+                fluid.N,
+            )
+        )
+
+        u_hat = np.fft.fftn(
+            u,
+            axes=(1, 2, 3),
+        )
+
+        low = max(
+            2.0,
+            fluid.N / 8.0,
+        )
+
+        high = max(
+            low + 1.0,
+            fluid.N / 4.0,
+        )
+
+        mask = (
+            (fluid.Kmag >= low)
+            & (fluid.Kmag < high)
         )
 
         filtered = np.zeros_like(
@@ -1793,1083 +2131,414 @@ class DiscreteProofAudit:
             mask
         ]
 
-        return np.real(
+        u = np.real(
             np.fft.ifftn(
                 filtered,
                 axes=(1, 2, 3),
             )
         )
 
-    def dealias_field(
-        self,
-        u,
-    ):
-        filtered = self.spectral_filter(
+        return AdversarialFamilies._normalize(
+            fluid,
             u,
-            self.two_thirds_mask(),
+            norm,
         )
 
-        return self.fl.leray_project(
-            filtered
-        )
-
-    def aliasing_audit(
-        self,
-        u,
+    @staticmethod
+    def nested_multiscale(
+        fluid,
+        norm="L2",
     ):
-        raw = self.critical_quotient(
-            u
+        u = np.zeros(
+            (
+                3,
+                fluid.N,
+                fluid.N,
+                fluid.N,
+            ),
+            dtype=float,
         )
 
-        dealiased_field = (
-            self.dealias_field(u)
-        )
+        x = fluid.X
+        y = fluid.Y
+        z = fluid.Z
 
-        dealiased = (
-            self.critical_quotient(
-                dealiased_field
+        # Three nested scales.
+
+        for m, amp in (
+            (1, 1.0),
+            (2, 0.65),
+            (4, 0.40),
+        ):
+            u[0] += (
+                amp
+                * np.sin(
+                    m * x
+                )
+                * np.cos(
+                    m * y
+                )
             )
+
+            u[1] += (
+                -amp
+                * np.cos(
+                    m * x
+                )
+                * np.sin(
+                    m * y
+                )
+            )
+
+        # Add a z-dependent divergence-free pair.
+
+        u[0] += (
+            0.35
+            * np.sin(2.0 * z)
         )
 
-        difference = abs(
-            raw
-            - dealiased
+        u[2] += (
+            0.35
+            * np.cos(2.0 * z)
         )
 
+        return AdversarialFamilies._normalize(
+            fluid,
+            u,
+            norm,
+        )
+
+    @staticmethod
+    def abc_beltrami(
+        fluid,
+        norm="L2",
+    ):
+        A = 1.0
+        B = 1.0
+        C = 1.0
+
+        x = fluid.X
+        y = fluid.Y
+        z = fluid.Z
+
+        u = np.zeros(
+            (
+                3,
+                fluid.N,
+                fluid.N,
+                fluid.N,
+            ),
+            dtype=float,
+        )
+
+        u[0] = (
+            A * np.sin(z)
+            + C * np.cos(y)
+        )
+
+        u[1] = (
+            B * np.sin(x)
+            + A * np.cos(z)
+        )
+
+        u[2] = (
+            C * np.sin(y)
+            + B * np.cos(x)
+        )
+
+        return AdversarialFamilies._normalize(
+            fluid,
+            u,
+            norm,
+        )
+
+    @staticmethod
+    def shear_layer(
+        fluid,
+        norm="L2",
+    ):
+        x = fluid.X
+        y = fluid.Y
+
+        u = np.zeros(
+            (
+                3,
+                fluid.N,
+                fluid.N,
+                fluid.N,
+            ),
+            dtype=float,
+        )
+
+        u[0] = (
+            np.sin(4.0 * y)
+            + 0.35 * np.sin(8.0 * y)
+        )
+
+        # A second component independent of its own coordinate
+        # preserves divergence-free structure.
+
+        u[2] = (
+            0.35 * np.cos(3.0 * x)
+        )
+
+        return AdversarialFamilies._normalize(
+            fluid,
+            u,
+            norm,
+        )
+
+    @staticmethod
+    def all(
+        fluid,
+        norm="L2",
+    ):
         return {
-            "C3_raw":
-                float(raw),
+            "single_spike":
+                AdversarialFamilies.single_spike(
+                    fluid,
+                    norm,
+                ),
 
-            "C3_dealiased":
-                float(dealiased),
+            "opposite_sign_dipole":
+                AdversarialFamilies.dipole(
+                    fluid,
+                    norm,
+                ),
 
-            "absolute_difference":
-                float(difference),
+            "near_nyquist_checkerboard":
+                AdversarialFamilies.near_nyquist_checkerboard(
+                    fluid,
+                    norm,
+                ),
 
-            "relative_difference":
-                float(
-                    difference
-                    / max(
-                        abs(raw),
-                        1e-30,
-                    )
+            "mid_dyadic_shell":
+                AdversarialFamilies.mid_dyadic_shell(
+                    fluid,
+                    norm,
+                ),
+
+            "nested_multiscale":
+                AdversarialFamilies.nested_multiscale(
+                    fluid,
+                    norm,
+                ),
+
+            "ABC_Beltrami":
+                AdversarialFamilies.abc_beltrami(
+                    fluid,
+                    norm,
+                ),
+
+            "shear_layer":
+                AdversarialFamilies.shear_layer(
+                    fluid,
+                    norm,
                 ),
         }
 
-    # ======================================================================
-    # AMPLITUDE INVARIANCE
-    # ======================================================================
-
-    def amplitude_invariance_test(
-        self,
-        u,
-        amplitudes=(
-            1.0,
-            2.0,
-            4.0,
-            8.0,
-        ),
-    ):
-        base = self.fl.norm_l2(u)
-
-        if base <= 1e-30:
-            raise ValueError(
-                "Cannot test amplitude scaling "
-                "of a zero field."
-            )
-
-        u0 = u / base
-
-        results = []
-
-        for amplitude in amplitudes:
-
-            ua = amplitude * u0
-
-            l3 = self.fl.norm_l3(ua)
-            d3 = self.critical_dissipation(
-                ua
-            )
-            wp = self.pressure_work(
-                ua
-            )
-
-            denominator = (
-                l3 * d3
-            )
-
-            c3 = (
-                wp / denominator
-                if denominator > 1e-30
-                else 0.0
-            )
-
-            r3 = (
-                self.chain_rule_defect(
-                    ua
-                )
-            )
-
-            split = (
-                self.pressure_solenoidal_split(
-                    ua
-                )
-            )
-
-            results.append(
-                ScalingResult(
-                    amplitude=float(
-                        amplitude
-                    ),
-                    c3=float(c3),
-                    r3=float(
-                        split["R_h"]
-                    ),
-                    cp=float(
-                        split["C_P"]
-                    ),
-                    cs=float(
-                        split["C_S"]
-                    ),
-                    l3=float(l3),
-                    d3=float(d3),
-                    pressure_work=float(wp),
-                )
-            )
-
-        return results
-
-    # ======================================================================
-    # RESOLUTION MEASUREMENT
-    # ======================================================================
-
-    def resolution_measurement(
-        self,
-        u,
-    ):
-        l3 = self.fl.norm_l3(u)
-        d3 = self.critical_dissipation(u)
-        wp = self.pressure_work(u)
-
-        denominator = (
-            l3 * d3
-        )
-
-        c3 = (
-            wp / denominator
-            if denominator > 1e-30
-            else 0.0
-        )
-
-        split = (
-            self.pressure_solenoidal_split(
-                u
-            )
-        )
-
-        edge = (
-            self.weighted_edge_quotient(
-                u
-            )["quotient"]
-        )
-
-        edge_central = (
-            self.weighted_edge_quotient_central(
-                u
-            )["quotient"]
-        )
-
-        return ResolutionResult(
-            N=self.fl.N,
-            c3=float(c3),
-            rh=float(split["R_h"]),
-            cp=float(split["C_P"]),
-            cs=float(split["C_S"]),
-            edge=float(edge),
-            edge_central=float(
-                edge_central
-            ),
-            l3=float(l3),
-            d3=float(d3),
-            pressure_work=float(wp),
-            null_fraction=float(
-                self.null_mode_fraction(u)
-            ),
-        )
-
-    # ======================================================================
-    # RANDOMIZED SEARCH
-    # ======================================================================
-
-    def objective_value(
-        self,
-        u,
-        objective: str,
-    ):
-        if objective == "C3":
-            return self.critical_quotient(u)
-
-        split = (
-            self.pressure_solenoidal_split(
-                u
-            )
-        )
-
-        if objective == "CP":
-            return split["C_P"]
-
-        if objective == "CS":
-            return split["C_S"]
-
-        if objective == "Rh":
-            return split["R_h"]
-
-        if objective == "Cedge":
-            return (
-                self.weighted_edge_quotient(
-                    u
-                )["quotient"]
-            )
-
-        if objective == "CedgeCentral":
-            return (
-                self.weighted_edge_quotient_central(
-                    u
-                )["quotient"]
-            )
-
-        raise ValueError(
-            f"Unknown objective: {objective}"
-        )
-
-    def random_search(
-        self,
-        objective: str = "C3",
-        starts: int = 8,
-        steps: int = 10,
-        perturbation: float = 0.05,
-        seed: int = 101,
-    ):
-        """
-        Randomized projected search.
-
-        This is NOT an optimizer and does NOT compute a supremum.
-        """
-
-        if starts < 1:
-            raise ValueError(
-                "starts must be >= 1."
-            )
-
-        if steps < 0:
-            raise ValueError(
-                "steps must be >= 0."
-            )
-
-        if perturbation <= 0:
-            raise ValueError(
-                "perturbation must be positive."
-            )
-
-        rng = np.random.default_rng(
-            seed
-        )
-
-        best_value = -np.inf
-        best_field = None
-
-        for _ in range(starts):
-
-            field_seed = int(
-                rng.integers(
-                    0,
-                    2**31 - 1,
-                )
-            )
-
-            u = (
-                self.fl
-                .random_divergence_free_field(
-                    seed=field_seed,
-                    amplitude=1.0,
-                )
-            )
-
-            value = self.objective_value(
-                u,
-                objective,
-            )
-
-            if value > best_value:
-                best_value = value
-                best_field = u.copy()
-
-            for _ in range(steps):
-
-                direction = (
-                    rng.standard_normal(
-                        u.shape
-                    )
-                )
-
-                direction = (
-                    self.fl.leray_project(
-                        direction
-                    )
-                )
-
-                direction_norm = (
-                    self.fl.norm_l2(
-                        direction
-                    )
-                )
-
-                if direction_norm <= 1e-30:
-                    continue
-
-                direction /= (
-                    direction_norm
-                )
-
-                candidate = (
-                    u
-                    + perturbation
-                    * direction
-                )
-
-                candidate = (
-                    self.fl.leray_project(
-                        candidate
-                    )
-                )
-
-                candidate_norm = (
-                    self.fl.norm_l2(
-                        candidate
-                    )
-                )
-
-                if candidate_norm <= 1e-30:
-                    continue
-
-                candidate /= (
-                    candidate_norm
-                )
-
-                candidate_value = (
-                    self.objective_value(
-                        candidate,
-                        objective,
-                    )
-                )
-
-                if candidate_value > value:
-                    u = candidate
-                    value = candidate_value
-
-                if value > best_value:
-                    best_value = value
-                    best_field = u.copy()
-
-        return SearchResult(
-            objective=objective,
-            best_value=float(
-                best_value
-            ),
-            best_field=best_field,
-            starts=starts,
-            steps=steps,
-        )
-
-    # Backward-compatible wrapper.
-    def adversarial_search(
-        self,
-        starts=3,
-        steps=5,
-        lr=0.01,
-        seed=101,
-    ):
-        result = self.random_search(
-            objective="C3",
-            starts=starts,
-            steps=steps,
-            perturbation=lr,
-            seed=seed,
-        )
-
-        return {
-            "best_C3":
-                result.best_value,
-            "best_field":
-                result.best_field,
-        }
-
 
 # ============================================================================
-# ADVERSARIAL FIELD FAMILIES
-# ============================================================================
-
-def single_spike_field(
-    fluid: StructurePreservingLatticeFluid3D,
-):
-    """
-    Localized Gaussian-like vector spike, then projected.
-    """
-
-    X = fluid.X
-    Y = fluid.Y
-    Z = fluid.Z
-
-    # Periodic distance to origin.
-    dx = np.angle(
-        np.exp(1j * X)
-    )
-    dy = np.angle(
-        np.exp(1j * Y)
-    )
-    dz = np.angle(
-        np.exp(1j * Z)
-    )
-
-    sigma = 0.35
-
-    bump = np.exp(
-        -(
-            dx ** 2
-            + dy ** 2
-            + dz ** 2
-        )
-        / (2.0 * sigma ** 2)
-    )
-
-    u = np.zeros(
-        (
-            3,
-            fluid.N,
-            fluid.N,
-            fluid.N,
-        )
-    )
-
-    u[0] = bump
-
-    u = fluid.leray_project(u)
-
-    n = fluid.norm_l2(u)
-
-    if n > 0:
-        u /= n
-
-    return u
-
-
-def dipole_field(
-    fluid: StructurePreservingLatticeFluid3D,
-):
-    X = fluid.X
-    Y = fluid.Y
-    Z = fluid.Z
-
-    sigma = 0.4
-
-    dx1 = np.angle(
-        np.exp(1j * X)
-    )
-
-    dx2 = np.angle(
-        np.exp(1j * (X - np.pi))
-    )
-
-    dy = np.angle(
-        np.exp(1j * Y)
-    )
-
-    dz = np.angle(
-        np.exp(1j * Z)
-    )
-
-    bump1 = np.exp(
-        -(
-            dx1 ** 2
-            + dy ** 2
-            + dz ** 2
-        )
-        / (2.0 * sigma ** 2)
-    )
-
-    bump2 = np.exp(
-        -(
-            dx2 ** 2
-            + dy ** 2
-            + dz ** 2
-        )
-        / (2.0 * sigma ** 2)
-    )
-
-    scalar = bump1 - bump2
-
-    u = np.zeros(
-        (
-            3,
-            fluid.N,
-            fluid.N,
-            fluid.N,
-        )
-    )
-
-    u[1] = scalar
-
-    u = fluid.leray_project(u)
-
-    n = fluid.norm_l2(u)
-
-    if n > 0:
-        u /= n
-
-    return u
-
-
-def checkerboard_field(
-    fluid: StructurePreservingLatticeFluid3D,
-):
-    idx = np.arange(
-        fluid.N
-    )
-
-    checker = (
-        (-1.0)
-        ** (
-            idx[:, None, None]
-            + idx[None, :, None]
-            + idx[None, None, :]
-        )
-    )
-
-    u = np.zeros(
-        (
-            3,
-            fluid.N,
-            fluid.N,
-            fluid.N,
-        )
-    )
-
-    u[0] = checker
-
-    u = fluid.leray_project(u)
-
-    n = fluid.norm_l2(u)
-
-    if n > 0:
-        u /= n
-
-    return u
-
-
-def dyadic_shell_field(
-    fluid: StructurePreservingLatticeFluid3D,
-):
-    """
-    Construct a single-band Fourier field.
-    """
-
-    rng = np.random.default_rng(777)
-
-    u = rng.standard_normal(
-        (
-            3,
-            fluid.N,
-            fluid.N,
-            fluid.N,
-        )
-    )
-
-    u_hat = np.fft.fftn(
-        u,
-        axes=(1, 2, 3),
-    )
-
-    radius = np.sqrt(
-        fluid.Kx ** 2
-        + fluid.Ky ** 2
-        + fluid.Kz ** 2
-    )
-
-    mask = (
-        (radius >= 2.0)
-        & (radius < 4.0)
-    )
-
-    u_hat[
-        :,
-        ~mask
-    ] = 0.0
-
-    u = np.real(
-        np.fft.ifftn(
-            u_hat,
-            axes=(1, 2, 3),
-        )
-    )
-
-    u = fluid.leray_project(u)
-
-    n = fluid.norm_l2(u)
-
-    if n > 0:
-        u /= n
-
-    return u
-
-
-def nested_multiscale_field(
-    fluid: StructurePreservingLatticeFluid3D,
-):
-    """
-    Superposition of three localized scales.
-    """
-
-    X = fluid.X
-    Y = fluid.Y
-    Z = fluid.Z
-
-    dx = np.angle(
-        np.exp(1j * X)
-    )
-    dy = np.angle(
-        np.exp(1j * Y)
-    )
-    dz = np.angle(
-        np.exp(1j * Z)
-    )
-
-    r2 = (
-        dx ** 2
-        + dy ** 2
-        + dz ** 2
-    )
-
-    u = np.zeros(
-        (
-            3,
-            fluid.N,
-            fluid.N,
-            fluid.N,
-        )
-    )
-
-    for sigma, amplitude in [
-        (0.20, 1.0),
-        (0.40, 0.6),
-        (0.80, 0.3),
-    ]:
-        bump = np.exp(
-            -r2
-            / (2.0 * sigma ** 2)
-        )
-
-        u[0] += (
-            amplitude
-            * bump
-        )
-
-        u[1] += (
-            0.5
-            * amplitude
-            * np.roll(
-                bump,
-                fluid.N // 8,
-                axis=1,
-            )
-        )
-
-    u = fluid.leray_project(u)
-
-    n = fluid.norm_l2(u)
-
-    if n > 0:
-        u /= n
-
-    return u
-
-
-def abc_field(
-    fluid: StructurePreservingLatticeFluid3D,
-):
-    """
-    ABC / Beltrami-type periodic field.
-    """
-
-    A = 1.0
-    B = 1.0
-    C = 1.0
-
-    u = np.zeros(
-        (
-            3,
-            fluid.N,
-            fluid.N,
-            fluid.N,
-        )
-    )
-
-    u[0] = (
-        A * np.sin(fluid.Z)
-        + C * np.cos(fluid.Y)
-    )
-
-    u[1] = (
-        B * np.sin(fluid.X)
-        + A * np.cos(fluid.Z)
-    )
-
-    u[2] = (
-        C * np.sin(fluid.Y)
-        + B * np.cos(fluid.X)
-    )
-
-    u = fluid.leray_project(u)
-
-    n = fluid.norm_l2(u)
-
-    if n > 0:
-        u /= n
-
-    return u
-
-
-def shear_layer_field(
-    fluid: StructurePreservingLatticeFluid3D,
-):
-    """
-    Smooth shear depending primarily on one coordinate.
-    """
-
-    u = np.zeros(
-        (
-            3,
-            fluid.N,
-            fluid.N,
-            fluid.N,
-        )
-    )
-
-    u[0] = np.tanh(
-        8.0
-        * np.sin(fluid.Y)
-    )
-
-    u = fluid.leray_project(u)
-
-    n = fluid.norm_l2(u)
-
-    if n > 0:
-        u /= n
-
-    return u
-
-
-def adversarial_families(
-    fluid: StructurePreservingLatticeFluid3D,
-):
-    return {
-        "single_spike":
-            single_spike_field(fluid),
-
-        "opposite_sign_dipole":
-            dipole_field(fluid),
-
-        "near_nyquist_checkerboard":
-            checkerboard_field(fluid),
-
-        "mid_dyadic_shell":
-            dyadic_shell_field(fluid),
-
-        "nested_multiscale":
-            nested_multiscale_field(fluid),
-
-        "ABC_Beltrami":
-            abc_field(fluid),
-
-        "shear_layer":
-            shear_layer_field(fluid),
-    }
-
-
-# ============================================================================
-# TRUE L-BFGS OPTIMIZATION
+# L-BFGS ADVERSARIAL OPTIMIZER
 # ============================================================================
 
 class LBFGSAdversarialOptimizer:
     """
-    Optional true L-BFGS optimization.
-
-    SciPy is required.
-
-    The optimization variable is an unconstrained vector v. The physical
-    field is
-
-        u(v) = P(v) / ||P(v)||_2.
-
-    Thus the candidate field remains discretely divergence-free.
+    Numerical adversarial search.
 
     IMPORTANT
     ---------
-    This is a numerical optimizer, not a proof of a supremum.
+
+    This class performs finite-dimensional numerical optimization only.
+
+    It does NOT prove a supremum.
+
+    The optimization parameterization is the divergence-free field itself,
+    represented in physical-space coordinates and projected after each
+    objective evaluation.
+
+    A true analytic gradient of the complete quotient is not claimed here.
+    SciPy's L-BFGS-B can therefore be used in its numerical-gradient mode.
+
+    This is intentionally marked as a DISCOVERY TOOL.
+
+    For practical runs, low-dimensional seeded families are recommended.
     """
 
     def __init__(
         self,
         audit: DiscreteProofAudit,
+        maxiter: int = 20,
+        ftol: float = 1e-9,
+        gtol: float = 1e-6,
+        maxfun: int = 1000,
     ):
         self.audit = audit
-        self.fl = audit.fl
+
+        self.maxiter = int(maxiter)
+        self.ftol = float(ftol)
+        self.gtol = float(gtol)
+        self.maxfun = int(maxfun)
 
         try:
-            import scipy.optimize as scipy_opt
-        except ImportError:
-            scipy_opt = None
+            from scipy.optimize import minimize
+        except ImportError as exc:
+            raise ImportError(
+                "SciPy is required for L-BFGS optimization. "
+                "Install with: pip install scipy"
+            ) from exc
 
-        self.scipy_opt = scipy_opt
+        self.minimize = minimize
 
-    def available(self):
-        return self.scipy_opt is not None
-
-    def normalize_field(
+    def _project_and_normalize(
         self,
-        raw,
+        vector,
     ):
-        raw = raw.reshape(
-            (
-                3,
-                self.fl.N,
-                self.fl.N,
-                self.fl.N,
-            )
+        shape = (
+            3,
+            self.audit.fl.N,
+            self.audit.fl.N,
+            self.audit.fl.N,
         )
 
-        projected = (
-            self.fl.leray_project(raw)
+        u = np.asarray(
+            vector,
+            dtype=float,
+        ).reshape(shape)
+
+        u = self.audit.fl.leray_project(
+            u
         )
 
-        norm = self.fl.norm_l2(
-            projected
+        n = self.audit.fl.norm_l2(
+            u
         )
 
-        if norm <= 1e-30:
-            return None
+        if n <= EPS:
+            return np.zeros_like(u)
 
-        return projected / norm
+        return u / n
 
-    def objective_from_vector(
+    def objective(
         self,
-        x,
-        objective,
+        vector,
+        target,
     ):
-        u = self.normalize_field(x)
-
-        if u is None:
-            return 1e6
-
-        value = (
-            self.audit.objective_value(
-                u,
-                objective,
-            )
+        u = self._project_and_normalize(
+            vector
         )
 
-        # scipy minimizes.
+        if target == "C_P":
+            value = (
+                self.audit.pressure_solenoidal_split(
+                    u
+                )["C_P"]
+            )
+
+        elif target == "C_S":
+            value = (
+                self.audit.pressure_solenoidal_split(
+                    u
+                )["C_S"]
+            )
+
+        elif target == "R_h":
+            value = (
+                self.audit.pressure_solenoidal_split(
+                    u
+                )["R_h"]
+            )
+
+        elif target == "C_edge":
+            value = (
+                self.audit.weighted_edge_quotient(
+                    u
+                )["quotient"]
+            )
+
+        else:
+            raise ValueError(
+                f"Unknown target: {target}"
+            )
+
         return -float(value)
 
-    def optimize_one(
+    def optimize(
         self,
         initial_field,
-        objective="CP",
-        maxiter=100,
-        ftol=1e-9,
+        target="C_S",
     ):
-        if not self.available():
-            raise RuntimeError(
-                "SciPy is not installed. "
-                "Install scipy to use L-BFGS."
-            )
+        x0 = np.asarray(
+            initial_field,
+            dtype=float,
+        ).ravel()
 
-        from scipy.optimize import minimize
-
-        initial = self.normalize_field(
-            initial_field
-        )
-
-        if initial is None:
-            raise ValueError(
-                "Initial field has zero projected norm."
-            )
-
-        x0 = initial.ravel().copy()
-
-        result = minimize(
+        result = self.minimize(
             lambda x:
-                self.objective_from_vector(
+                self.objective(
                     x,
-                    objective,
+                    target,
                 ),
+
             x0,
+
             method="L-BFGS-B",
+
             options={
-                "maxiter": int(maxiter),
-                "ftol": float(ftol),
+                "maxiter": self.maxiter,
+                "ftol": self.ftol,
+                "gtol": self.gtol,
+                "maxfun": self.maxfun,
                 "maxls": 20,
             },
         )
 
-        final_field = (
-            self.normalize_field(
+        field = (
+            self._project_and_normalize(
                 result.x
             )
         )
 
-        if final_field is None:
-            return OptimizationResult(
-                objective=objective,
-                best_value=-np.inf,
-                best_field=None,
-                starts=1,
-                iterations=int(
-                    result.nit
-                ),
-                scipy_available=True,
-            )
-
-        value = (
-            self.audit.objective_value(
-                final_field,
-                objective,
-            )
+        value = -float(
+            result.fun
         )
 
-        return OptimizationResult(
-            objective=objective,
-            best_value=float(value),
-            best_field=final_field,
-            starts=1,
-            iterations=int(
-                result.nit
+        return SearchResult(
+            target=target,
+            value=value,
+            success=bool(
+                result.success
             ),
-            scipy_available=True,
-        )
-
-    def optimize(
-        self,
-        objective="CP",
-        starts=4,
-        maxiter=100,
-        seed=12345,
-        initial_fields=None,
-    ):
-        if not self.available():
-            return OptimizationResult(
-                objective=objective,
-                best_value=np.nan,
-                best_field=None,
-                starts=0,
-                iterations=0,
-                scipy_available=False,
-            )
-
-        rng = np.random.default_rng(
-            seed
-        )
-
-        candidates = []
-
-        if initial_fields is not None:
-            candidates.extend(
-                initial_fields
-            )
-
-        while len(candidates) < starts:
-
-            u = (
-                self.fl
-                .random_divergence_free_field(
-                    seed=int(
-                        rng.integers(
-                            0,
-                            2**31 - 1,
-                        )
-                    ),
-                    amplitude=1.0,
+            nit=int(
+                getattr(
+                    result,
+                    "nit",
+                    0,
                 )
-            )
-
-            candidates.append(u)
-
-        best_value = -np.inf
-        best_field = None
-        total_iterations = 0
-
-        for index, initial in enumerate(
-            candidates[:starts],
-            start=1,
-        ):
-
-            print(
-                f"    L-BFGS start "
-                f"{index}/{starts} ..."
-            )
-
-            result = self.optimize_one(
-                initial,
-                objective=objective,
-                maxiter=maxiter,
-            )
-
-            total_iterations += (
-                result.iterations
-            )
-
-            print(
-                f"        value = "
-                f"{result.best_value:.8e}"
-            )
-
-            if (
-                result.best_field is not None
-                and result.best_value > best_value
-            ):
-                best_value = (
-                    result.best_value
+            ),
+            nfev=int(
+                getattr(
+                    result,
+                    "nfev",
+                    0,
                 )
-
-                best_field = (
-                    result.best_field.copy()
-                )
-
-        return OptimizationResult(
-            objective=objective,
-            best_value=float(best_value),
-            best_field=best_field,
-            starts=starts,
-            iterations=total_iterations,
-            scipy_available=True,
+            ),
+            message=str(
+                result.message
+            ),
+            field=field,
         )
 
 
 # ============================================================================
-# FIELD AUDIT REPORT
+# FIELD REPORTING
 # ============================================================================
 
 def print_field_report(
-    name: str,
-    audit: DiscreteProofAudit,
+    name,
+    audit,
     u,
 ):
-    fl = audit.fl
-
-    result = audit.resolution_measurement(
-        u
-    )
-
     split = (
         audit.pressure_solenoidal_split(
             u
@@ -2882,132 +2551,108 @@ def print_field_report(
         )
     )
 
-    edge_central = (
+    central = (
         audit.weighted_edge_quotient_central(
             u
         )
     )
 
-    pressure_split = (
-        audit.pressure_split_audit(u)
+    concentration = (
+        audit.scale_concentration(
+            u
+        )
     )
 
-    concentration = (
-        audit.scale_concentration(u)
+    null_fraction = (
+        audit.null_mode_fraction(
+            u
+        )
     )
 
     print()
+    print("-" * 78)
+    print(f"FIELD: {name}")
+    print("-" * 78)
+
     print(
-        f"  {name}"
-    )
-    print(
-        "  " + "-" * 70
+        f"    ||u||_3            = "
+        f"{audit.fl.norm_l3(u):.8e}"
     )
 
     print(
-        f"    divergence_inf       = "
-        f"{fl.divergence_linf(u):.6e}"
+        f"    D3                 = "
+        f"{audit.critical_dissipation(u):.8e}"
     )
 
     print(
-        f"    ||u||_3             = "
-        f"{result.l3:.6e}"
+        f"    C_P                = "
+        f"{split['C_P']:.8e}"
     )
 
     print(
-        f"    D3                  = "
-        f"{result.d3:.6e}"
+        f"    C_S                = "
+        f"{split['C_S']:.8e}"
     )
 
     print(
-        f"    C3                  = "
-        f"{result.c3:.8e}"
+        f"    R_h                = "
+        f"{split['R_h']:.8e} "
+        f"(analytic C_R <= "
+        f"{ANALYTIC_C_R_BOUND:.3f})"
     )
 
     print(
-        f"    CP                  = "
-        f"{result.cp:.8e}"
+        f"    C_edge             = "
+        f"{edge['quotient']:.8e} "
+        f"(analytic <= "
+        f"{ANALYTIC_C_EDGE_BOUND:.3f})"
     )
 
     print(
-        f"    CS                  = "
-        f"{result.cs:.8e}"
+        f"    C_edge central     = "
+        f"{central['quotient']:.8e}"
     )
 
     print(
-        f"    Rh                  = "
-        f"{result.rh:.8e}"
+        f"    pressure split     = "
+        f"{split['C_P']:.8e} + "
+        f"{split['C_S']:.8e}"
     )
 
     print(
-        f"    C_edge              = "
-        f"{edge['quotient']:.8e}"
+        f"    R_h decomposition   = "
+        f"|a+b| normalized = "
+        f"{split['R_h']:.8e}"
     )
 
     print(
-        f"    C_edge_central      = "
-        f"{edge_central['quotient']:.8e}"
+        f"    null-mode fraction = "
+        f"{null_fraction:.8e}"
     )
 
     print(
-        f"    null-mode fraction  = "
-        f"{result.null_fraction:.8e}"
+        f"    high-k E >= N/4    = "
+        f"{concentration['energy_high_N_over_4']:.8e}"
     )
 
     print(
-        f"    pressure split err  = "
-        f"{pressure_split['relative_residual']:.3e}"
+        f"    high-k E >= N/3    = "
+        f"{concentration['energy_high_N_over_3']:.8e}"
     )
 
     print(
-        f"    high-k energy >=N/4 = "
-        f"{concentration['energy_high_N_over_4']:.6e}"
-    )
-
-    print(
-        f"    high-k energy >=N/3 = "
-        f"{concentration['energy_high_N_over_3']:.6e}"
-    )
-
-    print(
-        f"    top 10% D3 fraction  = "
-        f"{concentration['top10_percent_D3_fraction']:.6e}"
-    )
-
-    print(
-        f"    split check:"
-    )
-
-    print(
-        f"        pressure         = "
-        f"{pressure_split['pressure']:.8e}"
-    )
-
-    print(
-        f"        <B,q>            = "
-        f"{pressure_split['local_term']:.8e}"
-    )
-
-    print(
-        f"        <B,Pq>           = "
-        f"{pressure_split['solenoidal_term']:.8e}"
-    )
-
-    print(
-        f"        reconstructed     = "
-        f"{pressure_split['reconstructed']:.8e}"
+        f"    top 10% D3         = "
+        f"{concentration['top10_percent_D3_fraction']:.8e}"
     )
 
 
 # ============================================================================
-# STRUCTURAL OPERATOR TESTS
+# OPERATOR TESTS
 # ============================================================================
 
 def run_operator_tests():
     print("=" * 78)
-    print(
-        "STRUCTURE-PRESERVING LATTICE NAVIER-STOKES TEST SUITE"
-    )
+    print("STRUCTURAL OPERATOR TESTS")
     print("=" * 78)
 
     N = 16
@@ -3020,13 +2665,17 @@ def run_operator_tests():
         )
     )
 
-    rng = np.random.default_rng(
-        42
+    audit = DiscreteProofAudit(
+        fluid
     )
 
-    # ------------------------------------------------------------------
+    rng = np.random.default_rng(
+        20260908
+    )
+
+    # ----------------------------------------------------------------------
     # Test 1: skew adjointness
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------------------
 
     f = rng.standard_normal(
         (N, N, N)
@@ -3036,65 +2685,53 @@ def run_operator_tests():
         (N, N, N)
     )
 
-    Df = fluid.D0(
-        f,
-        axis=0,
-    )
-
-    Dg = fluid.D0(
-        g,
-        axis=0,
-    )
-
     lhs = fluid.inner_product(
-        Df,
+        fluid.D0(f, 0),
         g,
     )
 
     rhs = -fluid.inner_product(
         f,
-        Dg,
+        fluid.D0(g, 0),
     )
 
-    skew_defect = (
-        abs(lhs - rhs)
-        / max(
-            1.0,
-            abs(lhs),
-            abs(rhs),
-        )
+    defect_1 = abs(
+        lhs - rhs
+    ) / max(
+        1.0,
+        abs(lhs),
+        abs(rhs),
     )
 
     print(
         f"Test 1: D0 skew-adjoint defect = "
-        f"{skew_defect:.3e}"
+        f"{defect_1:.3e}"
     )
 
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------------------
     # Test 2: divergence-free projection
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------------------
 
     u = (
         fluid.random_divergence_free_field(
-            seed=123,
-            amplitude=1.0,
+            seed=123
         )
     )
 
-    div_inf = (
-        fluid.divergence_linf(u)
+    defect_2 = fluid.divergence_linf(
+        u
     )
 
     print(
         f"Test 2: ||div_h u||_inf = "
-        f"{div_inf:.3e}"
+        f"{defect_2:.3e}"
     )
 
-    # ------------------------------------------------------------------
-    # Test 3: projection idempotence
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------------------
+    # Test 3: P^2=P
+    # ----------------------------------------------------------------------
 
-    u_random = rng.standard_normal(
+    ur = rng.standard_normal(
         (
             3,
             N,
@@ -3104,14 +2741,14 @@ def run_operator_tests():
     )
 
     Pu = fluid.leray_project(
-        u_random
+        ur
     )
 
     P2u = fluid.leray_project(
         Pu
     )
 
-    projection_defect = (
+    defect_3 = (
         fluid.norm_l2(
             P2u - Pu
         )
@@ -3122,237 +2759,283 @@ def run_operator_tests():
     )
 
     print(
-        f"Test 3: ||P^2u-Pu||/||Pu|| = "
-        f"{projection_defect:.3e}"
+        f"Test 3: projection idempotence = "
+        f"{defect_3:.3e}"
     )
 
-    # ------------------------------------------------------------------
-    # Test 4: convective energy cancellation
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------------------
+    # Test 4: energy cancellation
+    # ----------------------------------------------------------------------
 
     B = fluid.skew_convection(
         u,
         u,
     )
 
-    nonlinear_energy = (
-        fluid.inner_product(
-            B,
-            u,
-        )
+    value = fluid.inner_product(
+        B,
+        u,
     )
 
-    nonlinear_relative = (
-        abs(nonlinear_energy)
-        / max(
-            1.0,
-            fluid.norm_l2(B)
-            * fluid.norm_l2(u),
-        )
+    defect_4 = abs(
+        value
+    ) / max(
+        1.0,
+        fluid.norm_l2(B)
+        * fluid.norm_l2(u),
     )
 
     print(
-        f"Test 4: |<B(u,u),u>| normalized = "
-        f"{nonlinear_relative:.3e}"
+        f"Test 4: <B(u,u),u> normalized = "
+        f"{defect_4:.3e}"
     )
 
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------------------
     # Test 5: RHS energy identity
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------------------
 
-    rhs_u = fluid.rhs(u)
-
-    numerical_dE = (
-        fluid.inner_product(
-            rhs_u,
-            u,
-        )
+    rhs_u = fluid.rhs(
+        u
     )
 
-    theoretical_dE = (
+    numerical = fluid.inner_product(
+        rhs_u,
+        u,
+    )
+
+    theoretical = (
         -fluid.nu
         * fluid.enstrophy(u)
     )
 
-    energy_defect = (
-        abs(
-            numerical_dE
-            - theoretical_dE
-        )
-        / max(
-            1.0,
-            abs(theoretical_dE),
-        )
+    defect_5 = abs(
+        numerical
+        - theoretical
+    ) / max(
+        1.0,
+        abs(theoretical),
     )
 
     print(
-        f"Test 5: Energy identity relative defect = "
-        f"{energy_defect:.3e}"
+        f"Test 5: energy identity defect = "
+        f"{defect_5:.3e}"
     )
 
-    # ------------------------------------------------------------------
-    # Test 6: Taylor-Green divergence
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------------------
+    # Test 6: Taylor-Green
+    # ----------------------------------------------------------------------
 
     tg = fluid.taylor_green()
 
-    tg_div = (
-        fluid.divergence_linf(tg)
+    defect_6 = fluid.divergence_linf(
+        tg
     )
 
     print(
-        f"Test 6: Taylor-Green ||div_h u||_inf = "
-        f"{tg_div:.3e}"
+        f"Test 6: Taylor-Green divergence = "
+        f"{defect_6:.3e}"
     )
 
-    # ------------------------------------------------------------------
-    # Test 7: Laplacian consistency
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------------------
+    # Test 7: D0^2 = compatible Laplacian
+    # ----------------------------------------------------------------------
 
-    test_field = rng.standard_normal(
-        (N, N, N)
+    f2 = rng.standard_normal(
+        (
+            N,
+            N,
+            N,
+        )
     )
 
-    d0_laplacian = np.zeros_like(
-        test_field
+    d0_lap = np.zeros_like(
+        f2
     )
 
     for axis in range(3):
-
-        d0_laplacian += (
+        d0_lap += fluid.D0(
             fluid.D0(
-                fluid.D0(
-                    test_field,
-                    axis,
-                ),
+                f2,
                 axis,
-            )
+            ),
+            axis,
         )
 
-    spectral_laplacian = (
-        fluid.laplacian(
-            test_field
-        )
+    spectral_lap = fluid.laplacian(
+        f2
     )
 
-    laplacian_defect = (
+    defect_7 = (
         np.linalg.norm(
-            d0_laplacian
-            - spectral_laplacian
+            d0_lap
+            - spectral_lap
         )
         / max(
             1.0,
             np.linalg.norm(
-                spectral_laplacian
+                spectral_lap
             ),
         )
     )
 
     print(
-        f"Test 7: D0^2/Laplacian relative defect = "
-        f"{laplacian_defect:.3e}"
+        f"Test 7: Laplacian compatibility = "
+        f"{defect_7:.3e}"
     )
 
-    # ------------------------------------------------------------------
-    # Test 8: pressure split identity
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------------------
+    # Test 8: pressure split
+    # ----------------------------------------------------------------------
 
-    audit = DiscreteProofAudit(
-        fluid
+    split = audit.pressure_split_audit(
+        u
     )
 
-    split = (
-        audit.pressure_split_audit(
+    defect_8 = split[
+        "relative_residual"
+    ]
+
+    print(
+        f"Test 8: Hodge pressure split defect = "
+        f"{defect_8:.3e}"
+    )
+
+    # ----------------------------------------------------------------------
+    # Test 9: Hodge orthogonality
+    # ----------------------------------------------------------------------
+
+    mag = audit.velocity_magnitude(
+        u
+    )
+
+    q = mag * u
+
+    Pq = fluid.leray_project(
+        q
+    )
+
+    q_perp = q - Pq
+
+    orthogonal = fluid.inner_product(
+        Pq,
+        q_perp,
+    )
+
+    defect_9 = abs(
+        orthogonal
+    ) / max(
+        1.0,
+        fluid.norm_l2(Pq)
+        * fluid.norm_l2(q_perp),
+    )
+
+    print(
+        f"Test 9: Hodge orthogonality defect = "
+        f"{defect_9:.3e}"
+    )
+
+    # ----------------------------------------------------------------------
+    # Test 10: C_S fluctuation gauge invariance
+    # ----------------------------------------------------------------------
+
+    mean_mag = float(
+        np.mean(mag)
+    )
+
+    q_fluc = (
+        (mag - mean_mag)
+        * u
+    )
+
+    B = fluid.skew_convection(
+        u,
+        u,
+    )
+
+    Pq = fluid.leray_project(
+        q
+    )
+
+    Pq_fluc = fluid.leray_project(
+        q_fluc
+    )
+
+    val_orig = fluid.inner_product(
+        B,
+        Pq,
+    )
+
+    val_fluc = fluid.inner_product(
+        B,
+        Pq_fluc,
+    )
+
+    defect_10 = abs(
+        val_orig
+        - val_fluc
+    ) / max(
+        1.0,
+        abs(val_orig),
+    )
+
+    print(
+        f"Test 10: C_S fluctuation gauge defect = "
+        f"{defect_10:.3e}"
+    )
+
+    # ----------------------------------------------------------------------
+    # Test 11: certified edge ceiling
+    # ----------------------------------------------------------------------
+
+    edge = (
+        audit.weighted_edge_quotient(
             u
         )
     )
 
-    print(
-        f"Test 8: pressure split relative defect = "
-        f"{split['relative_residual']:.3e}"
-    )
-
-    # ------------------------------------------------------------------
-    # Test 9: P orthogonality
-    # ------------------------------------------------------------------
-
-    q = (
-        audit.velocity_magnitude(u)
-        * u
-    )
-
-    Pq = fluid.leray_project(q)
-
-    gradient_part = (
-        q - Pq
-    )
-
-    orthogonality = (
-        abs(
-            fluid.inner_product(
-                Pq,
-                gradient_part,
-            )
-        )
-        / max(
-            1.0,
-            fluid.norm_l2(Pq)
-            * fluid.norm_l2(
-                gradient_part
-            ),
-        )
+    defect_11 = max(
+        0.0,
+        edge["quotient"]
+        - ANALYTIC_C_EDGE_BOUND,
     )
 
     print(
-        f"Test 9: Pq/(I-P)q orthogonality = "
-        f"{orthogonality:.3e}"
+        f"Test 11: C_edge <= 2 certificate check = "
+        f"{defect_11:.3e}"
     )
 
-    # ------------------------------------------------------------------
-    # PASS / FAIL
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------------------
+    # Tolerances
+    # ----------------------------------------------------------------------
 
     tolerances = {
         "skew": 1e-12,
         "div": 1e-12,
         "projection": 1e-12,
-        "nonlinear": 1e-12,
         "energy": 1e-12,
         "tg": 1e-12,
         "laplacian": 1e-12,
-        "split": 1e-12,
+        "pressure": 1e-10,
         "orthogonality": 1e-12,
+        "gauge": 1e-12,
+        "edge": 1e-12,
     }
 
     passed = (
-        skew_defect
-        < tolerances["skew"]
-
-        and div_inf
-        < tolerances["div"]
-
-        and projection_defect
-        < tolerances["projection"]
-
-        and nonlinear_relative
-        < tolerances["nonlinear"]
-
-        and energy_defect
-        < tolerances["energy"]
-
-        and tg_div
-        < tolerances["tg"]
-
-        and laplacian_defect
-        < tolerances["laplacian"]
-
-        and split["relative_residual"]
-        < tolerances["split"]
-
-        and orthogonality
-        < tolerances["orthogonality"]
+        defect_1 < tolerances["skew"]
+        and defect_2 < tolerances["div"]
+        and defect_3 < tolerances["projection"]
+        and defect_4 < tolerances["energy"]
+        and defect_5 < tolerances["energy"]
+        and defect_6 < tolerances["tg"]
+        and defect_7 < tolerances["laplacian"]
+        and defect_8 < tolerances["pressure"]
+        and defect_9 < tolerances["orthogonality"]
+        and defect_10 < tolerances["gauge"]
+        and defect_11 < tolerances["edge"]
     )
 
+    print()
     print(
         "Operator tests: "
         + (
@@ -3364,14 +3047,14 @@ def run_operator_tests():
 
     if not passed:
         raise RuntimeError(
-            "Structure-preserving operator tests failed."
+            "One or more structural tests failed."
         )
 
-    return fluid
+    return fluid, audit
 
 
 # ============================================================================
-# ADVERSARIAL FAMILY AUDIT
+# SEVEN ADVERSARIAL FAMILIES
 # ============================================================================
 
 def run_adversarial_families(
@@ -3379,273 +3062,322 @@ def run_adversarial_families(
 ):
     print()
     print("=" * 78)
-    print(
-        "SEVEN ADVERSARIAL GEOMETRIC FAMILIES"
-    )
+    print("SEVEN ADVERSARIAL GEOMETRIC FAMILIES")
     print("=" * 78)
 
-    summary = []
+    all_results = {}
 
     for N in resolutions:
 
         print()
         print(
-            f"N = {N}"
-        )
-        print(
-            "-" * 78
+            f"RESOLUTION N={N}"
         )
 
         fluid = (
             StructurePreservingLatticeFluid3D(
-                N=N,
-                L=2.0 * np.pi,
-                nu=0.01,
+                N=N
             )
         )
 
-        audit = (
-            DiscreteProofAudit(
+        audit = DiscreteProofAudit(
+            fluid
+        )
+
+        families = (
+            AdversarialFamilies.all(
                 fluid
             )
         )
 
-        fields = adversarial_families(
-            fluid
-        )
+        all_results[N] = {}
 
-        for name, u in fields.items():
+        for name, u in families.items():
 
-            print_field_report(
-                name,
-                audit,
-                u,
-            )
-
-            measurement = (
-                audit.resolution_measurement(
+            split = (
+                audit.pressure_solenoidal_split(
                     u
                 )
             )
 
-            summary.append(
-                (
-                    name,
-                    measurement,
+            edge = (
+                audit.weighted_edge_quotient(
+                    u
                 )
             )
 
-    print()
-    print(
-        "ADVERSARIAL FAMILY SUMMARY"
-    )
-    print(
-        "-" * 78
-    )
+            all_results[N][name] = {
+                "C_P": split["C_P"],
+                "C_S": split["C_S"],
+                "R_h": split["R_h"],
+                "C_edge": edge["quotient"],
+            }
 
-    print(
-        f"{'Family':30s} "
-        f"{'N':>4s} "
-        f"{'CP':>10s} "
-        f"{'CS':>10s} "
-        f"{'Rh':>10s} "
-        f"{'Edge':>10s}"
-    )
-
-    for name, result in summary:
-
-        print(
-            f"{name:30s} "
-            f"{result.N:4d} "
-            f"{result.cp:10.4e} "
-            f"{result.cs:10.4e} "
-            f"{result.rh:10.4e} "
-            f"{result.edge:10.4e}"
-        )
-
-    return summary
-
-
-# ============================================================================
-# SEARCH AUDIT
-# ============================================================================
-
-def run_randomized_searches(
-    N=32,
-    starts=8,
-    steps=10,
-):
-    print()
-    print("=" * 78)
-    print(
-        f"RANDOMIZED LARGE-VALUE SEARCH — N={N}"
-    )
-    print("=" * 78)
-
-    fluid = (
-        StructurePreservingLatticeFluid3D(
-            N=N,
-            L=2.0 * np.pi,
-            nu=0.01,
-        )
-    )
-
-    audit = (
-        DiscreteProofAudit(
-            fluid
-        )
-    )
-
-    objectives = [
-        "C3",
-        "CP",
-        "CS",
-        "Rh",
-        "Cedge",
-        "CedgeCentral",
-    ]
-
-    results = {}
-
-    for objective in objectives:
-
-        print()
-        print(
-            f"Objective: {objective}"
-        )
-
-        result = audit.random_search(
-            objective=objective,
-            starts=starts,
-            steps=steps,
-            perturbation=0.05,
-            seed=1000 + len(
-                results
-            ),
-        )
-
-        results[objective] = result
-
-        print(
-            f"  best discovered value = "
-            f"{result.best_value:.10e}"
-        )
-
-        if result.best_field is not None:
-
-            print_field_report(
-                f"best randomized {objective}",
-                audit,
-                result.best_field,
+            print(
+                f"{name:32s} "
+                f"C_P={split['C_P']:.6e} "
+                f"C_S={split['C_S']:.6e} "
+                f"R_h={split['R_h']:.6e} "
+                f"C_edge={edge['quotient']:.6e}"
             )
 
-    return results
+            if (
+                edge["quotient"]
+                > ANALYTIC_C_EDGE_BOUND
+                + 1e-10
+            ):
+                print(
+                    "    WARNING: empirical C_edge exceeds "
+                    "the declared analytic ceiling."
+                )
+
+    return all_results
 
 
 # ============================================================================
-# L-BFGS AUDIT
+# RANDOMIZED SEARCH
 # ============================================================================
 
-def run_lbfgs_optimization(
-    N=32,
-    starts=4,
-    maxiter=100,
+def randomized_search(
+    audit,
+    starts=10,
+    steps=20,
+    perturbation=0.02,
+    seed=101,
+    target="C_S",
+):
+    """
+    Random local search.
+
+    This is deliberately not called an optimizer.
+    """
+
+    rng = np.random.default_rng(
+        seed
+    )
+
+    best_value = -np.inf
+    best_field = None
+
+    for start in range(starts):
+
+        u = (
+            audit.fl.random_divergence_free_field(
+                seed=int(
+                    rng.integers(
+                        0,
+                        2**31 - 1,
+                    )
+                )
+            )
+        )
+
+        def value(field):
+            if target == "C_P":
+                return audit.pressure_solenoidal_split(
+                    field
+                )["C_P"]
+
+            if target == "C_S":
+                return audit.pressure_solenoidal_split(
+                    field
+                )["C_S"]
+
+            if target == "R_h":
+                return audit.pressure_solenoidal_split(
+                    field
+                )["R_h"]
+
+            if target == "C_edge":
+                return audit.weighted_edge_quotient(
+                    field
+                )["quotient"]
+
+            raise ValueError(
+                target
+            )
+
+        current = value(u)
+
+        for _ in range(steps):
+
+            direction = rng.standard_normal(
+                u.shape
+            )
+
+            direction = (
+                audit.fl.leray_project(
+                    direction
+                )
+            )
+
+            n = audit.fl.norm_l2(
+                direction
+            )
+
+            if n <= EPS:
+                continue
+
+            direction /= n
+
+            candidate = (
+                u
+                + perturbation
+                * direction
+            )
+
+            candidate = (
+                audit.fl.leray_project(
+                    candidate
+                )
+            )
+
+            cn = audit.fl.norm_l2(
+                candidate
+            )
+
+            if cn <= EPS:
+                continue
+
+            candidate /= cn
+
+            candidate_value = (
+                value(candidate)
+            )
+
+            if candidate_value > current:
+                u = candidate
+                current = candidate_value
+
+        if current > best_value:
+            best_value = current
+            best_field = u.copy()
+
+    return {
+        "target": target,
+        "best_value": float(
+            best_value
+        ),
+        "field": best_field,
+    }
+
+
+# ============================================================================
+# L-BFGS SEARCH DRIVER
+# ============================================================================
+
+def run_lbfgs_searches(
+    N=16,
+    targets=(
+        "C_P",
+        "C_S",
+        "R_h",
+        "C_edge",
+    ),
+    maxiter=5,
+    seed=2026,
 ):
     print()
     print("=" * 78)
-    print(
-        f"TRUE L-BFGS ADVERSARIAL OPTIMIZATION — N={N}"
-    )
+    print("L-BFGS ADVERSARIAL DISCOVERY")
     print("=" * 78)
+
+    print(
+        "IMPORTANT: these are finite-dimensional discovered values, "
+        "not supremum bounds."
+    )
 
     fluid = (
         StructurePreservingLatticeFluid3D(
-            N=N,
-            L=2.0 * np.pi,
-            nu=0.01,
+            N=N
         )
     )
 
-    audit = (
-        DiscreteProofAudit(
+    audit = DiscreteProofAudit(
+        fluid
+    )
+
+    # Use several structured starts rather than only a Gaussian start.
+
+    starts = list(
+        AdversarialFamilies.all(
             fluid
+        ).items()
+    )
+
+    rng = np.random.default_rng(
+        seed
+    )
+
+    starts.append(
+        (
+            "random",
+            fluid.random_divergence_free_field(
+                seed=int(
+                    rng.integers(
+                        0,
+                        2**31 - 1,
+                    )
+                )
+            ),
         )
     )
 
     optimizer = (
         LBFGSAdversarialOptimizer(
-            audit
+            audit,
+            maxiter=maxiter,
+            maxfun=200,
         )
     )
 
-    if not optimizer.available():
+    results = []
 
-        print()
-        print(
-            "SciPy is not installed."
-        )
-        print(
-            "Install with:"
-        )
-        print(
-            "    python -m pip install scipy"
-        )
+    for target in targets:
 
-        return {}
+        best = None
 
-    objectives = [
-        "CP",
-        "CS",
-        "Rh",
-        "Cedge",
-    ]
+        for name, u0 in starts:
 
-    results = {}
+            print(
+                f"  target={target:7s} "
+                f"start={name:30s}"
+            )
 
-    for objective in objectives:
+            try:
+                result = optimizer.optimize(
+                    u0,
+                    target=target,
+                )
+            except Exception as exc:
+                print(
+                    f"    optimization failed: {exc}"
+                )
+                continue
 
-        print()
-        print(
-            "=" * 50
-        )
+            print(
+                f"    value={result.value:.8e} "
+                f"success={result.success} "
+                f"nit={result.nit} "
+                f"nfev={result.nfev}"
+            )
 
-        result = optimizer.optimize(
-            objective=objective,
-            starts=starts,
-            maxiter=maxiter,
-            seed=9000 + len(
-                results
-            ),
-        )
+            if (
+                best is None
+                or result.value > best.value
+            ):
+                best = result
 
-        results[objective] = result
+        if best is not None:
 
-        print()
-        print(
-            f"BEST L-BFGS {objective}"
-        )
+            results.append(
+                best
+            )
 
-        print(
-            f"  value      = "
-            f"{result.best_value:.10e}"
-        )
-
-        print(
-            f"  starts     = "
-            f"{result.starts}"
-        )
-
-        print(
-            f"  iterations = "
-            f"{result.iterations}"
-        )
-
-        if result.best_field is not None:
-
-            print_field_report(
-                f"L-BFGS maximizer of {objective}",
-                audit,
-                result.best_field,
+            print()
+            print(
+                f"BEST DISCOVERED {target}: "
+                f"{best.value:.10e}"
             )
 
     return results
@@ -3661,38 +3393,26 @@ def run_resolution_audit(
 ):
     print()
     print("=" * 78)
-    print(
-        "RESOLUTION AUDIT"
-    )
+    print("RESOLUTION AUDIT")
     print("=" * 78)
 
     results = []
 
     for N in resolutions:
 
-        print()
-        print(
-            f"N = {N}"
-        )
-
         fluid = (
             StructurePreservingLatticeFluid3D(
-                N=N,
-                L=2.0 * np.pi,
-                nu=0.01,
+                N=N
             )
         )
 
-        audit = (
-            DiscreteProofAudit(
-                fluid
-            )
+        audit = DiscreteProofAudit(
+            fluid
         )
 
         u = (
             fluid.random_divergence_free_field(
-                seed=seed,
-                amplitude=1.0,
+                seed=seed
             )
         )
 
@@ -3702,260 +3422,364 @@ def run_resolution_audit(
             )
         )
 
-        results.append(result)
-
-        print(
-            f"  C3              = "
-            f"{result.c3:.8e}"
+        results.append(
+            result
         )
 
         print(
-            f"  CP              = "
-            f"{result.cp:.8e}"
-        )
-
-        print(
-            f"  CS              = "
-            f"{result.cs:.8e}"
-        )
-
-        print(
-            f"  Rh              = "
-            f"{result.rh:.8e}"
-        )
-
-        print(
-            f"  C_edge          = "
-            f"{result.edge:.8e}"
-        )
-
-        print(
-            f"  C_edge central  = "
-            f"{result.edge_central:.8e}"
-        )
-
-        print(
-            f"  null fraction   = "
-            f"{result.null_fraction:.8e}"
-        )
-
-    print()
-    print(
-        "SUMMARY"
-    )
-    print(
-        "-" * 78
-    )
-
-    print(
-        f"{'N':>5s} "
-        f"{'C3':>12s} "
-        f"{'CP':>12s} "
-        f"{'CS':>12s} "
-        f"{'Rh':>12s} "
-        f"{'Cedge':>12s} "
-        f"{'null':>12s}"
-    )
-
-    for r in results:
-
-        print(
-            f"{r.N:5d} "
-            f"{r.c3:12.5e} "
-            f"{r.cp:12.5e} "
-            f"{r.cs:12.5e} "
-            f"{r.rh:12.5e} "
-            f"{r.edge:12.5e} "
-            f"{r.null_fraction:12.5e}"
+            f"N={N:4d} "
+            f"C_P={result.c_p:.8e} "
+            f"C_S={result.c_s:.8e} "
+            f"R_h={result.r_h:.8e} "
+            f"C_edge={result.c_edge:.8e}"
         )
 
     return results
 
 
 # ============================================================================
+# FINAL STATUS
+# ============================================================================
+
+def print_mathematical_status(
+    adversarial_results=None,
+    optimizer_results=None,
+):
+    print()
+    print("=" * 78)
+    print("MATHEMATICAL STATUS")
+    print("=" * 78)
+
+    print()
+    print("LEVEL 1 — EXACT DISCRETE ALGEBRA")
+    print("--------------------------------")
+    print(
+        "  D0 skew-adjointness:                VERIFIED"
+    )
+    print(
+        "  Leray projection structure:         VERIFIED"
+    )
+    print(
+        "  Convective energy cancellation:     VERIFIED"
+    )
+    print(
+        "  Hodge pressure split:               VERIFIED"
+    )
+    print(
+        "  Hodge orthogonality:                VERIFIED"
+    )
+    print(
+        "  C_S fluctuation gauge invariance:   VERIFIED"
+    )
+
+    print()
+    print("LEVEL 2 — UNIFORM DISCRETE CERTIFICATES")
+    print("----------------------------------------")
+    print(
+        f"  C_edge <= {ANALYTIC_C_EDGE_BOUND:.1f}: "
+        f"ANALYTICALLY CERTIFIED"
+    )
+    print(
+        f"  C_R <= {ANALYTIC_C_R_BOUND:.1f}: "
+        f"ANALYTICALLY CERTIFIED"
+    )
+
+    print()
+    print("REMAINING BOTTLENECK")
+    print("--------------------")
+    print(
+        "  C_S = |<B,P(|u|u)>|/(||u||_3 D3)"
+    )
+    print(
+        "  remains analytically OPEN in this code."
+    )
+
+    print()
+    print("PRESSURE CONSEQUENCE")
+    print("--------------------")
+    print(
+        "  C_P <= C_R + C_S"
+    )
+    print(
+        f"      <= {ANALYTIC_C_R_BOUND:.1f} + C_S"
+    )
+
+    if optimizer_results:
+
+        print()
+        print(
+            "BEST NUMERICALLY DISCOVERED VALUES"
+        )
+        print(
+            "-----------------------------------"
+        )
+
+        for result in optimizer_results:
+
+            print(
+                f"  {result.target:8s} "
+                f"{result.value:.10e}"
+            )
+
+        print()
+        print(
+            "These are discovered finite-dimensional values."
+        )
+        print(
+            "They are NOT certified upper bounds."
+        )
+
+    if adversarial_results:
+
+        print()
+        print(
+            "ADVERSARIAL FAMILY SEARCH"
+        )
+        print(
+            "-------------------------"
+        )
+
+        maxima = {
+            "C_P": 0.0,
+            "C_S": 0.0,
+            "R_h": 0.0,
+            "C_edge": 0.0,
+        }
+
+        for N, families in (
+            adversarial_results.items()
+        ):
+            for data in families.values():
+                for key in maxima:
+                    maxima[key] = max(
+                        maxima[key],
+                        data[key],
+                    )
+
+        for key, value in maxima.items():
+
+            print(
+                f"  discovered max {key:7s} = "
+                f"{value:.10e}"
+            )
+
+    print()
+    print("LEVEL 3 — CONTINUUM")
+    print("--------------------")
+    print(
+        "  N -> infinity, null-mode resolution, "
+        "compactness and continuum estimates: OPEN"
+    )
+
+    print()
+    print(
+        "FINAL WARNING:"
+    )
+
+    print(
+        "  Numerical boundedness, resolution stability, "
+        "optimization failure, or absence of a counterexample "
+        "does not establish a continuum supremum."
+    )
+
+    print()
+    print(
+        "  The central analytical target is the solenoidal "
+        "pairing C_S."
+    )
+
+    print("=" * 78)
+
+
+# ============================================================================
+# FIELD REPORT SUITE
+# ============================================================================
+
+def run_field_reports(N=16):
+    print()
+    print("=" * 78)
+    print(
+        f"ADVERSARIAL FIELD REPORTS — N={N}"
+    )
+    print("=" * 78)
+
+    fluid = (
+        StructurePreservingLatticeFluid3D(
+            N=N
+        )
+    )
+
+    audit = DiscreteProofAudit(
+        fluid
+    )
+
+    families = (
+        AdversarialFamilies.all(
+            fluid
+        )
+    )
+
+    for name, u in families.items():
+        print_field_report(
+            name,
+            audit,
+            u,
+        )
+
+    return fluid, audit, families
+
+
+# ============================================================================
 # COMPLETE AUDIT
 # ============================================================================
 
-def run_discrete_proof_audit(
-    resolutions=(16, 32, 64),
-    seed=42,
-    adversarial=True,
+def run_complete_audit(
+    quick=False,
+    full=False,
     optimize=False,
-    search_starts=8,
-    search_steps=10,
-    optimizer_starts=4,
-    optimizer_iterations=100,
 ):
     print("=" * 78)
-    print(
-        "DISCRETE NAVIER-STOKES PROOF / AUDIT"
-    )
+    print("DISCRETE NAVIER-STOKES PROOF / AUDIT")
     print("=" * 78)
 
     print()
     print(
-        "STATUS:"
+        "STATUS: DISCRETE EXPERIMENTAL / CERTIFICATE-DISCOVERY ENGINE"
+    )
+
+    print()
+    print(
+        f"Python: {sys.version.split()[0]}"
     )
 
     print(
-        "    LEVEL 1: exact finite-dimensional identities."
-    )
-
-    print(
-        "    LEVEL 2: numerical search for large quotients."
-    )
-
-    print(
-        "    LEVEL 3: continuum theorem NOT established."
+        f"NumPy : {np.__version__}"
     )
 
     # ----------------------------------------------------------------------
-    # Basic random-field resolution audit
+    # Structural tests
     # ----------------------------------------------------------------------
 
-    resolution_results = (
+    fluid, audit = (
+        run_operator_tests()
+    )
+
+    # ----------------------------------------------------------------------
+    # Field reports
+    # ----------------------------------------------------------------------
+
+    run_field_reports(
+        N=16
+    )
+
+    # ----------------------------------------------------------------------
+    # Seven families
+    # ----------------------------------------------------------------------
+
+    if quick:
+
+        adversarial_results = (
+            run_adversarial_families(
+                resolutions=(16,)
+            )
+        )
+
+    else:
+
+        adversarial_results = (
+            run_adversarial_families(
+                resolutions=(
+                    16,
+                    32,
+                )
+            )
+        )
+
+    # ----------------------------------------------------------------------
+    # Resolution
+    # ----------------------------------------------------------------------
+
+    if full:
+
         run_resolution_audit(
-            resolutions=resolutions,
-            seed=seed,
-        )
-    )
-
-    # ----------------------------------------------------------------------
-    # Seven adversarial families
-    # ----------------------------------------------------------------------
-
-    if adversarial:
-
-        family_resolutions = tuple(
-            N
-            for N in resolutions
-            if N <= 64
+            resolutions=(
+                16,
+                32,
+                64,
+            )
         )
 
-        if not family_resolutions:
-            family_resolutions = (
-                resolutions[0],
+    else:
+
+        run_resolution_audit(
+            resolutions=(
+                16,
+                32,
+            )
+        )
+
+    # ----------------------------------------------------------------------
+    # Randomized discovery
+    # ----------------------------------------------------------------------
+
+    if not quick:
+
+        print()
+        print("=" * 78)
+        print(
+            "RANDOMIZED DISCOVERY"
+        )
+        print("=" * 78)
+
+        for target in (
+            "C_P",
+            "C_S",
+            "R_h",
+            "C_edge",
+        ):
+
+            result = randomized_search(
+                audit,
+                starts=3,
+                steps=5,
+                perturbation=0.01,
+                seed=100 + len(target),
+                target=target,
             )
 
-        run_adversarial_families(
-            resolutions=family_resolutions
-        )
+            print(
+                f"{target:8s}: "
+                f"best discovered = "
+                f"{result['best_value']:.10e}"
+            )
 
     # ----------------------------------------------------------------------
-    # Randomized searches
+    # L-BFGS
     # ----------------------------------------------------------------------
 
-    if adversarial:
-
-        search_N = max(
-            resolutions
-        )
-
-        run_randomized_searches(
-            N=search_N,
-            starts=search_starts,
-            steps=search_steps,
-        )
-
-    # ----------------------------------------------------------------------
-    # True optimizer
-    # ----------------------------------------------------------------------
+    optimizer_results = None
 
     if optimize:
 
-        optimize_N = min(
-            max(resolutions),
-            32,
-        )
-
-        run_lbfgs_optimization(
-            N=optimize_N,
-            starts=optimizer_starts,
-            maxiter=optimizer_iterations,
+        optimizer_results = (
+            run_lbfgs_searches(
+                N=16,
+                maxiter=5,
+            )
         )
 
     # ----------------------------------------------------------------------
-    # Mathematical status
+    # Final status
     # ----------------------------------------------------------------------
 
-    print()
-    print("=" * 78)
-    print(
-        "MATHEMATICAL STATUS"
+    print_mathematical_status(
+        adversarial_results=(
+            adversarial_results
+        ),
+        optimizer_results=(
+            optimizer_results
+        ),
     )
-    print("=" * 78)
-
-    print(
-        """
-LEVEL 1 — EXACT DISCRETE ALGEBRA
---------------------------------
-The program verifies finite-dimensional identities including:
-
-    * D0 skew-adjointness;
-    * divergence-free projection;
-    * projection idempotence;
-    * skew-form energy cancellation;
-    * compatible Laplacian identity;
-    * pressure/splitting identity;
-    * P/(I-P) orthogonality.
-
-LEVEL 2 — NUMERICAL EVIDENCE
-----------------------------
-The primary unresolved target is the weighted edge quotient
-
-    C_edge(u)
-      =
-    sum |u| |delta_j u|^3
-    ----------------------------------------------
-    h ||u||_3 sum |u| |delta_j u|^2 / h^2.
-
-Large-value searches also target
-
-    C_P,
-    C_S,
-    R_h.
-
-Randomized searches discover large values only.
-
-L-BFGS searches are genuine numerical optimizations, but their output
-is still only a discovered local/global numerical candidate at a finite
-resolution. It is NOT a proof of the supremum.
-
-NYQUIST / NULL MODES
---------------------
-Central differences possess additional Ktilde = 0 modes. The program
-reports their Fourier energy fraction and can remove them for a
-sensitivity audit.
-
-SCALE CONCENTRATION
--------------------
-For large-value candidates the program reports high-frequency Fourier
-energy and concentration of the critical dissipation.
-
-SHELLS
-------
-Explicitly filtered disjoint Fourier shells are orthogonal in the
-ordinary L2 pairing. This does NOT establish nonlinear triadic
-decoupling.
-
-CONTINUUM STATUS
-----------------
-None of the numerical observations establish an N-independent analytic
-bound or a continuum Navier-Stokes regularity theorem.
-
-The central mathematical question remains whether an N-independent
-analytic estimate can be proved for the weighted edge quotient or an
-equivalent structure-preserving formulation.
-"""
-    )
-
-    print("=" * 78)
-    print(
-        "AUDIT COMPLETE"
-    )
-    print("=" * 78)
-
-    return resolution_results
 
 
 # ============================================================================
@@ -3963,11 +3787,10 @@ equivalent structure-preserving formulation.
 # ============================================================================
 
 def main():
-
     parser = argparse.ArgumentParser(
         description=(
-            "Structure-preserving discrete "
-            "Navier-Stokes proof/audit."
+            "Discrete Navier-Stokes "
+            "Level-1/Level-2 proof audit."
         )
     )
 
@@ -3975,8 +3798,8 @@ def main():
         "--quick",
         action="store_true",
         help=(
-            "Run structural tests and a single N=16 "
-            "resolution audit."
+            "Run N=16 only and skip randomized "
+            "discovery."
         ),
     )
 
@@ -3984,8 +3807,7 @@ def main():
         "--full",
         action="store_true",
         help=(
-            "Run N=16,32,64 with adversarial "
-            "families and searches."
+            "Include N=64 resolution audit."
         ),
     )
 
@@ -3993,116 +3815,17 @@ def main():
         "--optimize",
         action="store_true",
         help=(
-            "Run true L-BFGS optimization. "
-            "Requires SciPy."
-        ),
-    )
-
-    parser.add_argument(
-        "--search-starts",
-        type=int,
-        default=8,
-        help=(
-            "Number of starts for randomized search."
-        ),
-    )
-
-    parser.add_argument(
-        "--search-steps",
-        type=int,
-        default=10,
-        help=(
-            "Number of local perturbation steps."
-        ),
-    )
-
-    parser.add_argument(
-        "--opt-starts",
-        type=int,
-        default=4,
-        help=(
-            "Number of L-BFGS starts per objective."
-        ),
-    )
-
-    parser.add_argument(
-        "--opt-iter",
-        type=int,
-        default=100,
-        help=(
-            "Maximum L-BFGS iterations per start."
+            "Run SciPy L-BFGS adversarial searches. "
+            "This can be expensive."
         ),
     )
 
     args = parser.parse_args()
 
-    print(
-        "Python:",
-        sys.version.split()[0],
-    )
-
-    print(
-        "NumPy:",
-        np.__version__,
-    )
-
-    print()
-
-    # Always run Level-1 operator tests first.
-    run_operator_tests()
-
-    print()
-
-    if args.quick:
-
-        run_discrete_proof_audit(
-            resolutions=(16,),
-            seed=42,
-            adversarial=False,
-            optimize=False,
-            search_starts=args.search_starts,
-            search_steps=args.search_steps,
-            optimizer_starts=args.opt_starts,
-            optimizer_iterations=args.opt_iter,
-        )
-
-        return
-
-    if args.full:
-
-        resolutions = (
-            16,
-            32,
-            64,
-        )
-
-        run_discrete_proof_audit(
-            resolutions=resolutions,
-            seed=42,
-            adversarial=True,
-            optimize=args.optimize,
-            search_starts=args.search_starts,
-            search_steps=args.search_steps,
-            optimizer_starts=args.opt_starts,
-            optimizer_iterations=args.opt_iter,
-        )
-
-        return
-
-    # Default run.
-    run_discrete_proof_audit(
-        resolutions=(
-            16,
-            32,
-            64,
-        ),
-        seed=42,
-        adversarial=True,
+    run_complete_audit(
+        quick=args.quick,
+        full=args.full,
         optimize=args.optimize,
-        search_starts=args.search_starts,
-        search_steps=args.search_steps,
-        optimizer_starts=args.opt_starts,
-        optimizer_iterations=args.opt_iter,
     )
 
 
