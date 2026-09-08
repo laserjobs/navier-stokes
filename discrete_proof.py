@@ -122,6 +122,9 @@ RUN
 Quick:
     python discrete_proof.py --quick
 
+Targeted C_S Discovery:
+    python discrete_proof.py --target-cs
+
 Full:
     python discrete_proof.py --full
 
@@ -139,7 +142,7 @@ from __future__ import annotations
 import argparse
 import sys
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -190,6 +193,33 @@ class SearchResult:
     nfev: int
     message: str
     field: Optional[np.ndarray]
+
+
+@dataclass
+class CSResult:
+    cs: float
+    numerator: float
+    l3: float
+    d3: float
+    rh: float
+
+
+@dataclass
+class CSSearchResult:
+    best_cs: float
+    best_field: Optional[np.ndarray]
+    history: List[Dict]
+    starts: int
+    iterations: int
+
+
+@dataclass
+class CSShellResult:
+    shells: List[int]
+    values: np.ndarray
+    absolute_values: np.ndarray
+    total: float
+    row_sums: np.ndarray
 
 
 # ============================================================================
@@ -1564,49 +1594,16 @@ class DiscreteProofAudit:
         )
 
         for a, j in enumerate(shells):
-
-            D[a] = (
-                self.shell_dissipation(
-                    u,
-                    masks[j],
-                )
-            )
-
+            D[a] = self.shell_dissipation(u, masks[j])
             for b, k in enumerate(shells):
-
-                gp_j = np.zeros_like(
-                    gp_hat
-                )
-
-                gq_k = np.zeros_like(
-                    gq_hat
-                )
-
-                gp_j[
-                    :,
-                    masks[j]
-                ] = gp_hat[
-                    :,
-                    masks[j]
-                ]
-
-                gq_k[
-                    :,
-                    masks[k]
-                ] = gq_hat[
-                    :,
-                    masks[k]
-                ]
-
-                inner = np.sum(
-                    gp_j
-                    * np.conj(gq_k)
-                )
-
-                M[a, b] = (
-                    abs(inner)
-                    * parseval
-                )
+                common_mask = masks[j] & masks[k]
+                if np.any(common_mask):
+                    inner = np.sum(
+                        gp_hat[:, common_mask] * np.conj(gq_hat[:, common_mask])
+                    )
+                    M[a, b] = abs(inner) * parseval
+                else:
+                    M[a, b] = 0.0
 
         l3 = self.fl.norm_l3(u)
 
@@ -2531,6 +2528,392 @@ class LBFGSAdversarialOptimizer:
 
 
 # ============================================================================
+# C_S TARGETED DISCOVERY ENGINE
+# ============================================================================
+
+class CSTargetedDiscovery:
+    """
+    Targeted numerical engine for the solenoidal pairing
+
+        C_S = |<B, P(|u|u)>| / (||u||_3 D3).
+
+    Focuses exclusively on the remaining Level-2 analytical bottleneck.
+    """
+
+    def __init__(self, audit: DiscreteProofAudit):
+        self.audit = audit
+        self.fl = audit.fl
+
+    def project_normalize(self, u):
+        u = self.fl.leray_project(u)
+        n = self.fl.norm_l3(u)
+        if n <= EPS:
+            raise ValueError("Zero field encountered during normalization.")
+        return u / n
+
+    def cs_components(self, u):
+        u = self.project_normalize(u)
+        mag = self.audit.velocity_magnitude(u)
+        B = self.fl.skew_convection(u, u)
+        q = mag * u
+        Pq = self.fl.leray_project(q)
+
+        numerator = abs(self.fl.inner_product(B, Pq))
+        l3 = self.fl.norm_l3(u)
+        d3 = self.audit.critical_dissipation(u)
+        denom = max(l3 * d3, EPS)
+
+        cs = numerator / denom
+        rh_num = abs(self.fl.inner_product(B, q))
+        rh = rh_num / denom
+
+        return CSResult(
+            cs=float(cs),
+            numerator=float(numerator),
+            l3=float(l3),
+            d3=float(d3),
+            rh=float(rh),
+        )
+
+    def gauge_invariance(self, u):
+        """
+        Test exact identity: <B, P(|u|u)> = <B, P((|u|-mean|u|)u)>.
+        """
+        u = self.project_normalize(u)
+        mag = self.audit.velocity_magnitude(u)
+        q = mag * u
+        mean_mag = float(np.mean(mag))
+        q_fluc = (mag - mean_mag) * u
+
+        B = self.fl.skew_convection(u, u)
+        Pq = self.fl.leray_project(q)
+        Pq_fluc = self.fl.leray_project(q_fluc)
+
+        a = self.fl.inner_product(B, Pq)
+        b = self.fl.inner_product(B, Pq_fluc)
+        defect = abs(a - b) / max(1.0, abs(a), abs(b))
+
+        return {
+            "original": float(a),
+            "fluctuation": float(b),
+            "mean_magnitude": mean_mag,
+            "defect": float(defect),
+        }
+
+    def cs_fluctuation_form(self, u):
+        u = self.project_normalize(u)
+        mag = self.audit.velocity_magnitude(u)
+        mean_mag = float(np.mean(mag))
+        q_fluc = (mag - mean_mag) * u
+
+        B = self.fl.skew_convection(u, u)
+        Pq = self.fl.leray_project(q_fluc)
+        numerator = abs(self.fl.inner_product(B, Pq))
+        l3 = self.fl.norm_l3(u)
+        d3 = self.audit.critical_dissipation(u)
+
+        return numerator / max(l3 * d3, EPS)
+
+    def random_start(self, rng):
+        seed = int(rng.integers(0, 2**31 - 1))
+        u = self.fl.random_divergence_free_field(seed=seed, amplitude=1.0)
+        return self.project_normalize(u)
+
+    def random_fourier_perturbation(self, u, rng, amplitude=0.05, cutoff=None):
+        N = self.fl.N
+        if cutoff is None:
+            cutoff = max(2, N // 3)
+
+        noise = rng.standard_normal(size=u.shape)
+        noise_hat = np.fft.fftn(noise, axes=(1, 2, 3))
+
+        mask = (
+            (np.abs(self.fl.Kx) <= cutoff)
+            & (np.abs(self.fl.Ky) <= cutoff)
+            & (np.abs(self.fl.Kz) <= cutoff)
+        )
+        noise_hat *= mask[None, ...]
+
+        noise = np.real(np.fft.ifftn(noise_hat, axes=(1, 2, 3)))
+        noise = self.fl.leray_project(noise)
+        n = self.fl.norm_l3(noise)
+        if n <= EPS:
+            return u.copy()
+        noise /= n
+
+        return self.project_normalize(u + amplitude * noise)
+
+    def local_search(self, u, rng, iterations=100, initial_step=0.10, min_step=1e-5, cutoff=None):
+        u = self.project_normalize(u)
+        current = self.cs_components(u)
+        best_u = u.copy()
+        best_cs = current.cs
+        history = []
+        step = initial_step
+
+        for it in range(iterations):
+            candidate = self.random_fourier_perturbation(u, rng, amplitude=step, cutoff=cutoff)
+            value = self.cs_components(candidate)
+            accepted = value.cs > current.cs
+
+            if accepted:
+                u = candidate
+                current = value
+                if value.cs > best_cs:
+                    best_cs = value.cs
+                    best_u = candidate.copy()
+            else:
+                step *= 0.97
+
+            step = max(step, min_step)
+            history.append({
+                "iteration": it,
+                "C_S": float(current.cs),
+                "accepted": bool(accepted),
+                "step": float(step),
+                "R_h": float(current.rh),
+            })
+
+        return best_u, best_cs, history
+
+    def search(self, starts=16, iterations=100, seed=20260908, initial_step=0.10, cutoff=None, initial_field=None):
+        rng = np.random.default_rng(seed)
+        best_cs = -np.inf
+        best_field = None
+        history = []
+
+        for s in range(starts):
+            if s == 0 and initial_field is not None:
+                u = self.project_normalize(initial_field)
+            else:
+                u = self.random_start(rng)
+
+            initial = self.cs_components(u)
+            candidate, value, local_history = self.local_search(
+                u, rng, iterations=iterations, initial_step=initial_step, cutoff=cutoff
+            )
+            history.append({
+                "start": s,
+                "initial_C_S": initial.cs,
+                "final_C_S": value,
+                "local_history": local_history,
+            })
+
+            if value > best_cs:
+                best_cs = value
+                best_field = candidate.copy()
+
+        return CSSearchResult(
+            best_cs=float(best_cs),
+            best_field=best_field,
+            history=history,
+            starts=starts,
+            iterations=iterations,
+        )
+
+    def shell_cs_decomposition(self, u):
+        u = self.project_normalize(u)
+        masks = self.audit.dyadic_shell_masks()
+        B = self.fl.skew_convection(u, u)
+        mag = self.audit.velocity_magnitude(u)
+        q = mag * u
+        Pq = self.fl.leray_project(q)
+
+        B_hat = np.fft.fftn(B, axes=(1, 2, 3))
+        Pq_hat = np.fft.fftn(Pq, axes=(1, 2, 3))
+        parseval = self.fl.h ** 3 / self.fl.N ** 3
+
+        shells = []
+        values = []
+
+        for j, mask in masks.items():
+            if not np.any(mask):
+                continue
+
+            inner = np.sum(B_hat[:, mask] * np.conj(Pq_hat[:, mask]))
+            value = float(np.real(inner) * parseval)
+            shells.append(j)
+            values.append(value)
+
+        values = np.asarray(values, dtype=float)
+
+        return CSShellResult(
+            shells=shells,
+            values=values,
+            absolute_values=np.abs(values),
+            total=float(np.sum(values)),
+            row_sums=np.abs(values),
+        )
+
+    def remove_null_modes(self, u):
+        u_hat = np.fft.fftn(u, axes=(1, 2, 3))
+        u_hat[:, self.fl.null_modes] = 0.0
+        filtered = np.real(np.fft.ifftn(u_hat, axes=(1, 2, 3)))
+        return self.project_normalize(filtered)
+
+    def null_mode_audit(self, u):
+        u = self.project_normalize(u)
+        before = self.cs_components(u)
+        filtered = self.remove_null_modes(u)
+        after = self.cs_components(filtered)
+        abs_change = abs(before.cs - after.cs)
+
+        return {
+            "C_S_raw": before.cs,
+            "C_S_filtered": after.cs,
+            "absolute_change": float(abs_change),
+            "relative_change": float(abs_change / max(abs(before.cs), EPS)),
+        }
+
+    def dealiased_cs_audit(self, u):
+        u = self.project_normalize(u)
+        raw = self.cs_components(u)
+        filtered = self.audit.dealias_field(u)
+        filtered = self.project_normalize(filtered)
+        dealiased = self.cs_components(filtered)
+        abs_change = abs(raw.cs - dealiased.cs)
+
+        return {
+            "C_S_raw": raw.cs,
+            "C_S_dealiased": dealiased.cs,
+            "absolute_change": float(abs_change),
+            "relative_change": float(abs_change / max(abs(raw.cs), EPS)),
+        }
+
+    def record(self, u):
+        result = self.cs_components(u)
+        shell = self.shell_cs_decomposition(u)
+        gauge = self.gauge_invariance(u)
+        nulls = self.null_mode_audit(u)
+        alias = self.dealiased_cs_audit(u)
+
+        return {
+            "N": int(self.fl.N),
+            "C_S": result.cs,
+            "R_h": result.rh,
+            "numerator": result.numerator,
+            "L3": result.l3,
+            "D3": result.d3,
+            "gauge_defect": gauge["defect"],
+            "null_mode_C_S": nulls["C_S_filtered"],
+            "null_mode_relative_change": nulls["relative_change"],
+            "dealiased_C_S": alias["C_S_dealiased"],
+            "dealiased_relative_change": alias["relative_change"],
+            "shells": shell.shells,
+            "shell_values": shell.values.tolist(),
+            "shell_absolute_values": shell.absolute_values.tolist(),
+        }
+
+
+def explain_cs_shell_data(shell_result: CSShellResult):
+    values = np.asarray(shell_result.values)
+    if len(values) == 0:
+        return {"dominant_shell": None, "dominance_fraction": 0.0, "effective_shell_count": 0.0}
+
+    absolute = np.abs(values)
+    total = np.sum(absolute)
+    if total <= EPS:
+        return {"dominant_shell": shell_result.shells[0], "dominance_fraction": 0.0, "effective_shell_count": 0.0}
+
+    p = absolute / total
+    dominant_index = int(np.argmax(absolute))
+    entropy = -np.sum(p[p > 0] * np.log(p[p > 0]))
+    effective_shell_count = float(np.exp(entropy))
+
+    return {
+        "dominant_shell": shell_result.shells[dominant_index],
+        "dominance_fraction": float(p[dominant_index]),
+        "effective_shell_count": effective_shell_count,
+    }
+
+
+def print_cs_discovery_report(audit: DiscreteProofAudit, u, label="field"):
+    engine = CSTargetedDiscovery(audit)
+    result = engine.cs_components(u)
+    gauge = engine.gauge_invariance(u)
+    shell = engine.shell_cs_decomposition(u)
+    shell_info = explain_cs_shell_data(shell)
+    nulls = engine.null_mode_audit(u)
+    alias = engine.dealiased_cs_audit(u)
+
+    print()
+    print("=" * 78)
+    print(f"C_S TARGETED DISCOVERY REPORT — {label}")
+    print("=" * 78)
+    print(f"    C_S                 = {result.cs:.12e}")
+    print(f"    R_h                 = {result.rh:.12e} (analytic C_R <= {ANALYTIC_C_R_BOUND:.3f})")
+    print(f"    numerator           = {result.numerator:.12e}")
+    print(f"    ||u||_3             = {result.l3:.12e}")
+    print(f"    D3                  = {result.d3:.12e}")
+    print(f"    gauge defect        = {gauge['defect']:.3e}")
+    print()
+    print("NULL-MODE ROBUSTNESS")
+    print(f"    raw C_S             = {nulls['C_S_raw']:.12e}")
+    print(f"    filtered C_S        = {nulls['C_S_filtered']:.12e}")
+    print(f"    relative change     = {nulls['relative_change']:.3e}")
+    print()
+    print("DEALIASING ROBUSTNESS")
+    print(f"    raw C_S             = {alias['C_S_raw']:.12e}")
+    print(f"    dealiased C_S       = {alias['C_S_dealiased']:.12e}")
+    print(f"    relative change     = {alias['relative_change']:.3e}")
+    print()
+    print("OUTPUT-SHELL DECOMPOSITION")
+    for j, value in zip(shell.shells, shell.values):
+        print(f"    shell {j:2d}: {value:+.12e}")
+    print(f"    shell sum           = {shell.total:+.12e}")
+    print(f"    dominant shell      = {shell_info['dominant_shell']} (fraction: {shell_info['dominance_fraction']:.1%})")
+    print(f"    effective shells    = {shell_info['effective_shell_count']:.2f}")
+    print("=" * 78)
+
+
+def run_cs_campaign(audit: DiscreteProofAudit, families: Dict[str, np.ndarray], starts=4, iterations=50, seed=20260908):
+    engine = CSTargetedDiscovery(audit)
+    results = {}
+
+    print()
+    print("=" * 78)
+    print("TARGETED C_S DISCOVERY CAMPAIGN (SMOOTH FOURIER ASCENT)")
+    print("=" * 78)
+
+    for name, u in families.items():
+        base = engine.cs_components(u)
+        search = engine.search(
+            starts=starts,
+            iterations=iterations,
+            seed=seed,
+            initial_field=u,
+        )
+        record = engine.record(search.best_field)
+        results[name] = {
+            "initial_C_S": base.cs,
+            "best_C_S": search.best_cs,
+            "search": search,
+            "record": record,
+        }
+        print(f"  {name:28s} initial C_S={base.cs:.6e} -> best C_S={search.best_cs:.6e}")
+
+    print()
+    print("C_S CAMPAIGN SUMMARY")
+    print("-" * 78)
+    global_best = -np.inf
+    global_name = None
+
+    for name, res in results.items():
+        val = res["best_C_S"]
+        print(f"  {name:28s} C_S = {val:.10e}")
+        if val > global_best:
+            global_best = val
+            global_name = name
+
+    print()
+    print(f"GLOBAL DISCOVERED C_S = {global_best:.10e} (from {global_name})")
+    print("WARNING: Discovered numerical values do NOT prove an analytical supremum.")
+    print("=" * 78)
+
+    return results
+
+
+# ============================================================================
 # FIELD REPORTING
 # ============================================================================
 
@@ -3444,6 +3827,7 @@ def run_resolution_audit(
 def print_mathematical_status(
     adversarial_results=None,
     optimizer_results=None,
+    cs_campaign_results=None,
 ):
     print()
     print("=" * 78)
@@ -3563,6 +3947,13 @@ def print_mathematical_status(
                 f"{value:.10e}"
             )
 
+    if cs_campaign_results:
+        print()
+        print("TARGETED C_S CAMPAIGN DISCOVERY")
+        print("-------------------------------")
+        for name, res in cs_campaign_results.items():
+            print(f"  {name:28s} C_S = {res['best_C_S']:.10e}")
+
     print()
     print("LEVEL 3 — CONTINUUM")
     print("--------------------")
@@ -3637,6 +4028,9 @@ def run_complete_audit(
     quick=False,
     full=False,
     optimize=False,
+    target_cs=False,
+    campaign_starts=4,
+    campaign_iter=50,
 ):
     print("=" * 78)
     print("DISCRETE NAVIER-STOKES PROOF / AUDIT")
@@ -3668,7 +4062,7 @@ def run_complete_audit(
     # Field reports
     # ----------------------------------------------------------------------
 
-    run_field_reports(
+    _, _, families = run_field_reports(
         N=16
     )
 
@@ -3772,12 +4166,24 @@ def run_complete_audit(
     # Final status
     # ----------------------------------------------------------------------
 
+    cs_campaign_results = None
+    if target_cs:
+        cs_campaign_results = run_cs_campaign(
+            audit,
+            families,
+            starts=campaign_starts,
+            iterations=campaign_iter,
+        )
+
     print_mathematical_status(
         adversarial_results=(
             adversarial_results
         ),
         optimizer_results=(
             optimizer_results
+        ),
+        cs_campaign_results=(
+            cs_campaign_results
         ),
     )
 
@@ -3820,12 +4226,38 @@ def main():
         ),
     )
 
+    parser.add_argument(
+        "--target-cs",
+        action="store_true",
+        help=(
+            "Run targeted Fourier ascent and shell "
+            "decomposition on C_S."
+        ),
+    )
+
+    parser.add_argument(
+        "--campaign-starts",
+        type=int,
+        default=4,
+        help="Number of starts for targeted C_S campaign.",
+    )
+
+    parser.add_argument(
+        "--campaign-iter",
+        type=int,
+        default=50,
+        help="Number of iterations for targeted C_S campaign.",
+    )
+
     args = parser.parse_args()
 
     run_complete_audit(
         quick=args.quick,
         full=args.full,
         optimize=args.optimize,
+        target_cs=args.target_cs,
+        campaign_starts=args.campaign_starts,
+        campaign_iter=args.campaign_iter,
     )
 
 
