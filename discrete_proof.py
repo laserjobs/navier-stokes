@@ -202,6 +202,7 @@ class CSResult:
     l3: float
     d3: float
     rh: float
+    cos_theta: float
 
 
 @dataclass
@@ -1098,12 +1099,18 @@ class DiscreteProofAudit:
             Pq,
         )
 
+        PB = self.fl.leray_project(B)
+        norm_PB = self.fl.norm_l2(PB)
+        norm_Pq = self.fl.norm_l2(Pq)
+        cos_theta = (abs(b) / max(norm_PB * norm_Pq, EPS)) if (norm_PB * norm_Pq > EPS) else 0.0
+
         denominator = max(
             self.denominator(u),
             EPS,
         )
 
         return {
+            "cos_theta": float(cos_theta),
             "a": float(a),
             "b": float(b),
 
@@ -2567,12 +2574,18 @@ class CSTargetedDiscovery:
         rh_num = abs(self.fl.inner_product(B, q))
         rh = rh_num / denom
 
+        PB = self.fl.leray_project(B)
+        norm_PB = self.fl.norm_l2(PB)
+        norm_Pq = self.fl.norm_l2(Pq)
+        cos_theta = (numerator / max(norm_PB * norm_Pq, EPS)) if (norm_PB * norm_Pq > EPS) else 0.0
+
         return CSResult(
             cs=float(cs),
             numerator=float(numerator),
             l3=float(l3),
             d3=float(d3),
             rh=float(rh),
+            cos_theta=float(cos_theta),
         )
 
     def gauge_invariance(self, u):
@@ -2841,6 +2854,7 @@ def print_cs_discovery_report(audit: DiscreteProofAudit, u, label="field"):
     print(f"C_S TARGETED DISCOVERY REPORT — {label}")
     print("=" * 78)
     print(f"    C_S                 = {result.cs:.12e}")
+    print(f"    alignment cos(theta)= {result.cos_theta:.6f} ({result.cos_theta:.2%})")
     print(f"    R_h                 = {result.rh:.12e} (analytic C_R <= {ANALYTIC_C_R_BOUND:.3f})")
     print(f"    numerator           = {result.numerator:.12e}")
     print(f"    ||u||_3             = {result.l3:.12e}")
@@ -2975,6 +2989,8 @@ def print_field_report(
     print(
         f"    C_S                = "
         f"{split['C_S']:.8e}"
+        f"(alignment cos theta = "
+        f"{split['cos_theta']:.4f}, {split['cos_theta']:.2%})"
     )
 
     print(
